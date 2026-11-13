@@ -20,7 +20,8 @@ android {
     buildTypes {
         release {
             isDefault = true
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             // Uses debug keystore so release builds install/run out of the box;
             // replace with a release signingConfig before publishing to Play Store.
             signingConfig = signingConfigs.getByName("debug")

@@ -513,7 +513,7 @@ private fun SelectedDayCard(
             } else {
                 Button(
                     onClick = onTogglePeriodStart,
-                    colors = ButtonDefaults.buttonColors(containerColor = RosePeriod, contentColor = Color.White)
+                    colors = ButtonDefaults.buttonColors(containerColor = RedPeriod, contentColor = Color.White)
                 ) {
                     Text("Period Started", fontSize = 12.sp)
                 }

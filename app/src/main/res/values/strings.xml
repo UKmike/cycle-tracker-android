@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Cycle</string>
+    <string name="widget_name">Cycle Status &amp; Next Period</string>
+    <string name="widget_description">Shows days until your next period, colored green when fertile, yellow when could be fertile, and red when not fertile.</string>
+</resources>

@@ -106,9 +106,9 @@ class CycleWidgetProvider : AppWidgetProvider() {
                     "Could Be Fertile"
                 )
                 FertilityStatus.NOT_FERTILE -> WidgetStyle(
-                    R.drawable.widget_bg_red,
+                    R.drawable.widget_bg_blue,
                     Color.WHITE,
-                    Color.parseColor("#FEE2E2"),
+                    Color.parseColor("#DBEAFE"),
                     "Not Fertile"
                 )
             }

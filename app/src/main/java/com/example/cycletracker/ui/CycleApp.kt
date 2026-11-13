@@ -66,8 +66,8 @@ import java.time.temporal.ChronoUnit
 
 private val GreenFertile = Color(0xFF059669)
 private val YellowCouldBe = Color(0xFFFBBF24)
-private val RedNotFertile = Color(0xFFDC2626)
-private val RosePeriod = Color(0xFFE11D48)
+private val BlueNotFertile = Color(0xFF2563EB)
+private val RedPeriod = Color(0xFFDC2626)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -98,7 +98,7 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
                     Button(
                         onClick = { viewModel.togglePeriodStart(today) },
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isTodayLogged) GreenFertile else RosePeriod,
+                            containerColor = if (isTodayLogged) GreenFertile else RedPeriod,
                             contentColor = Color.White
                         ),
                         shape = RoundedCornerShape(12.dp),
@@ -188,7 +188,7 @@ private fun HomeWidgetPreviewCard(
             statusText = "Could Be Fertile"
         }
         FertilityStatus.NOT_FERTILE -> {
-            bgColor = RedNotFertile
+            bgColor = BlueNotFertile
             contentColor = Color.White
             statusText = "Not Fertile"
         }
@@ -360,15 +360,15 @@ private fun CalendarCard(
                                     )
                                     info.periodStatus == PeriodStatus.LOGGED_START ||
                                         info.periodStatus == PeriodStatus.LOGGED -> Triple(
-                                        RosePeriod.copy(alpha = 0.22f),
-                                        RosePeriod,
-                                        RosePeriod
+                                        RedPeriod.copy(alpha = 0.22f),
+                                        RedPeriod,
+                                        RedPeriod
                                     )
                                     info.periodStatus == PeriodStatus.PREDICTED_START ||
                                         info.periodStatus == PeriodStatus.PREDICTED -> Triple(
-                                        RosePeriod.copy(alpha = 0.08f),
-                                        RosePeriod.copy(alpha = 0.55f),
-                                        RosePeriod.copy(alpha = 0.6f)
+                                        RedPeriod.copy(alpha = 0.08f),
+                                        RedPeriod.copy(alpha = 0.55f),
+                                        RedPeriod.copy(alpha = 0.6f)
                                     )
                                     info.fertility == FertilityStatus.FERTILE -> Triple(
                                         GreenFertile.copy(alpha = 0.16f),
@@ -381,9 +381,9 @@ private fun CalendarCard(
                                         YellowCouldBe
                                     )
                                     else -> Triple(
-                                        RedNotFertile.copy(alpha = 0.10f),
-                                        RedNotFertile.copy(alpha = 0.28f),
-                                        RedNotFertile
+                                        BlueNotFertile.copy(alpha = 0.10f),
+                                        BlueNotFertile.copy(alpha = 0.28f),
+                                        BlueNotFertile
                                     )
                                 }
 
@@ -432,8 +432,8 @@ private fun CalendarCard(
             ) {
                 LegendItem(GreenFertile, "Fertile")
                 LegendItem(YellowCouldBe, "Could be fertile")
-                LegendItem(RedNotFertile, "Not fertile")
-                LegendItem(RosePeriod, "Period / Likely next")
+                LegendItem(BlueNotFertile, "Not fertile")
+                LegendItem(RedPeriod, "Period / Likely next")
             }
         }
     }

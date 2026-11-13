@@ -42,6 +42,10 @@ class CycleCalculatorTest {
         val day14 = CycleCalculator.classifyDate(start.plusDays(13), starts, model)
         assertEquals(FertilityStatus.FERTILE, day14.fertility)
 
+        // Day 18 (Nov 18): 3 days after fertile period ends (Day 15) -> could be fertile
+        val day18 = CycleCalculator.classifyDate(start.plusDays(17), starts, model)
+        assertEquals(FertilityStatus.COULD_BE_FERTILE, day18.fertility)
+
         // Day 22 (Nov 22): luteal phase, not fertile
         val day22 = CycleCalculator.classifyDate(start.plusDays(21), starts, model)
         assertEquals(FertilityStatus.NOT_FERTILE, day22.fertility)

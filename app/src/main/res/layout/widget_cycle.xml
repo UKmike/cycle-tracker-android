@@ -69,7 +69,7 @@
         android:layout_marginTop="6dp"
         android:maxLines="1"
         android:ellipsize="end"
-        android:text="Tap to open Cycle"
+        android:text="Tap to open Maya"
         android:textColor="#E5E7EB"
         android:textSize="11sp" />
 

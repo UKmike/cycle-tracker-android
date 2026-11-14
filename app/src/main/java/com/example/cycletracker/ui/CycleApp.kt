@@ -2,6 +2,7 @@ package com.example.cycletracker.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -56,11 +57,13 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.cycletracker.R
 import com.example.cycletracker.domain.CycleCalculator
 import com.example.cycletracker.domain.CycleModel
 import com.example.cycletracker.domain.DayClassification
@@ -87,10 +90,21 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = "Cycle",
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_launcher_foreground),
+                            contentDescription = "Maya logo",
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFFFF8F6))
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = "Maya",
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 },
                 actions = {
                     if (state.periodStarts.isEmpty()) {

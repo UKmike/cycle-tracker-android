@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "CycleTracker"
+rootProject.name = "Maya"
 include(":app")

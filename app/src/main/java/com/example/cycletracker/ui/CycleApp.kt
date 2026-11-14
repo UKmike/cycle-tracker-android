@@ -118,10 +118,6 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
                         TextButton(onClick = { viewModel.loadSampleHistory() }) {
                             Text("Sample")
                         }
-                    } else {
-                        TextButton(onClick = { viewModel.clearAll() }) {
-                            Text("Reset")
-                        }
                     }
                 }
             )

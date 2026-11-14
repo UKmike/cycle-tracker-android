@@ -5,37 +5,37 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Cycle ring segments (top-right: Red period, bottom-right: Light Blue not fertile, bottom-left: Yellow could-be, top-left: Green fertile) -->
-    <!-- Top-right arc (Red) -->
+    <!-- Full-bleed 4-color cycle ring reaching the outermost edge (radius 30..54) -->
+    <!-- Top-right arc (Red: Period) -->
     <path
-        android:pathData="M54,24 A30,30 0 0,1 84,54"
-        android:strokeWidth="7"
+        android:pathData="M54,12 A42,42 0 0,1 96,54"
+        android:strokeWidth="24"
         android:strokeColor="#DC2626"
-        android:strokeLineCap="round"
+        android:strokeLineCap="butt"
         android:fillColor="#00000000" />
 
-    <!-- Bottom-right arc (Light Blue) -->
+    <!-- Bottom-right arc (Light Blue: Not Fertile) -->
     <path
-        android:pathData="M84,54 A30,30 0 0,1 54,84"
-        android:strokeWidth="7"
+        android:pathData="M96,54 A42,42 0 0,1 54,96"
+        android:strokeWidth="24"
         android:strokeColor="#38BDF8"
-        android:strokeLineCap="round"
+        android:strokeLineCap="butt"
         android:fillColor="#00000000" />
 
-    <!-- Bottom-left arc (Yellow) -->
+    <!-- Bottom-left arc (Yellow: Could Be Fertile) -->
     <path
-        android:pathData="M54,84 A30,30 0 0,1 24,54"
-        android:strokeWidth="7"
+        android:pathData="M54,96 A42,42 0 0,1 12,54"
+        android:strokeWidth="24"
         android:strokeColor="#FBBF24"
-        android:strokeLineCap="round"
+        android:strokeLineCap="butt"
         android:fillColor="#00000000" />
 
-    <!-- Top-left arc (Green) -->
+    <!-- Top-left arc (Green: Fertile) -->
     <path
-        android:pathData="M24,54 A30,30 0 0,1 54,24"
-        android:strokeWidth="7"
+        android:pathData="M12,54 A42,42 0 0,1 54,12"
+        android:strokeWidth="24"
         android:strokeColor="#059669"
-        android:strokeLineCap="round"
+        android:strokeLineCap="butt"
         android:fillColor="#00000000" />
 
     <!-- Center heart motif -->

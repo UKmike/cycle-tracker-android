@@ -66,7 +66,7 @@ import java.time.temporal.ChronoUnit
 
 private val GreenFertile = Color(0xFF059669)
 private val YellowCouldBe = Color(0xFFFBBF24)
-private val BlueNotFertile = Color(0xFF2563EB)
+private val BlueNotFertile = Color(0xFF38BDF8)
 private val RedPeriod = Color(0xFFDC2626)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -189,7 +189,7 @@ private fun HomeWidgetPreviewCard(
         }
         FertilityStatus.NOT_FERTILE -> {
             bgColor = BlueNotFertile
-            contentColor = Color.White
+            contentColor = Color(0xFF082F49)
             statusText = "Not Fertile"
         }
     }
@@ -352,38 +352,38 @@ private fun CalendarCard(
                                 val isSelected = date == selectedDate
                                 val isToday = date == today
 
-                                val (cellBg, cellBorder, dotColor) = when {
+                                val (cellBg, cellBorder, cellText) = when {
                                     !model.hasData -> Triple(
                                         MaterialTheme.colorScheme.surface,
                                         MaterialTheme.colorScheme.outlineVariant,
-                                        Color.Transparent
+                                        MaterialTheme.colorScheme.onSurface
                                     )
                                     info.periodStatus == PeriodStatus.LOGGED_START ||
                                         info.periodStatus == PeriodStatus.LOGGED -> Triple(
-                                        RedPeriod.copy(alpha = 0.22f),
                                         RedPeriod,
-                                        RedPeriod
+                                        Color(0xFF991B1B),
+                                        Color.White
                                     )
                                     info.periodStatus == PeriodStatus.PREDICTED_START ||
                                         info.periodStatus == PeriodStatus.PREDICTED -> Triple(
-                                        RedPeriod.copy(alpha = 0.08f),
-                                        RedPeriod.copy(alpha = 0.55f),
-                                        RedPeriod.copy(alpha = 0.6f)
+                                        Color(0xFFFCA5A5),
+                                        RedPeriod,
+                                        Color(0xFF7F1D1D)
                                     )
                                     info.fertility == FertilityStatus.FERTILE -> Triple(
-                                        GreenFertile.copy(alpha = 0.16f),
-                                        GreenFertile.copy(alpha = 0.45f),
-                                        GreenFertile
+                                        GreenFertile,
+                                        Color(0xFF047857),
+                                        Color.White
                                     )
                                     info.fertility == FertilityStatus.COULD_BE_FERTILE -> Triple(
-                                        YellowCouldBe.copy(alpha = 0.18f),
-                                        YellowCouldBe.copy(alpha = 0.55f),
-                                        YellowCouldBe
+                                        YellowCouldBe,
+                                        Color(0xFFD97706),
+                                        Color(0xFF451A03)
                                     )
                                     else -> Triple(
-                                        BlueNotFertile.copy(alpha = 0.10f),
-                                        BlueNotFertile.copy(alpha = 0.28f),
-                                        BlueNotFertile
+                                        BlueNotFertile,
+                                        Color(0xFF0284C7),
+                                        Color(0xFF082F49)
                                     )
                                 }
 
@@ -394,7 +394,7 @@ private fun CalendarCard(
                                         .clip(RoundedCornerShape(10.dp))
                                         .background(cellBg)
                                         .border(
-                                            width = if (isSelected) 2.dp else 1.dp,
+                                            width = if (isSelected) 2.5.dp else 1.dp,
                                             color = if (isSelected) MaterialTheme.colorScheme.onSurface else cellBorder,
                                             shape = RoundedCornerShape(10.dp)
                                         )
@@ -404,16 +404,16 @@ private fun CalendarCard(
                                     Text(
                                         text = dayNum.toString(),
                                         fontSize = 12.sp,
-                                        fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
-                                        color = if (isToday) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                        fontWeight = if (isToday) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                        color = cellText,
                                         modifier = Modifier.align(Alignment.TopStart)
                                     )
-                                    if (model.hasData) {
+                                    if (isToday) {
                                         Box(
                                             modifier = Modifier
-                                                .size(7.dp)
+                                                .size(6.dp)
                                                 .clip(CircleShape)
-                                                .background(dotColor)
+                                                .background(cellText)
                                                 .align(Alignment.BottomEnd)
                                         )
                                     }

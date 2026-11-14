@@ -36,6 +36,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -122,26 +123,25 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
                             Text("Reset")
                         }
                     }
-                    Button(
-                        onClick = { viewModel.togglePeriodStart(today) },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (isTodayLogged) GreenFertile else RedPeriod,
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.padding(end = 8.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (isTodayLogged) Icons.Default.Check else Icons.Default.Add,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            text = if (isTodayLogged) "Logged Today" else "Period Today",
-                            fontSize = 12.sp
-                        )
-                    }
+                }
+            )
+        },
+        floatingActionButton = {
+            ExtendedFloatingActionButton(
+                onClick = { viewModel.togglePeriodStart(today) },
+                containerColor = if (isTodayLogged) GreenFertile else RedPeriod,
+                contentColor = Color.White,
+                icon = {
+                    Icon(
+                        imageVector = if (isTodayLogged) Icons.Default.Check else Icons.Default.Add,
+                        contentDescription = null
+                    )
+                },
+                text = {
+                    Text(
+                        text = if (isTodayLogged) "Logged Today" else "Period Today",
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
             )
         }
@@ -191,7 +191,7 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
                 onRemove = viewModel::removePeriodStart
             )
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(80.dp))
         }
     }
 }

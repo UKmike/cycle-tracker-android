@@ -207,18 +207,30 @@ private fun HomeWidgetPreviewCard(
     val contentColor: Color
     val statusText: String
 
-    when (todayInfo.fertility) {
-        FertilityStatus.FERTILE -> {
+    when {
+        todayInfo.periodStatus == PeriodStatus.LOGGED_START ||
+            todayInfo.periodStatus == PeriodStatus.LOGGED -> {
+            gradColors = listOf(Color(0xFFEF4444), RedPeriod, Color(0xFFB91C1C))
+            contentColor = Color.White
+            statusText = "Period"
+        }
+        todayInfo.periodStatus == PeriodStatus.PREDICTED_START ||
+            todayInfo.periodStatus == PeriodStatus.PREDICTED -> {
+            gradColors = listOf(Color(0xFFFCA5A5), Color(0xFFF87171), Color(0xFFEF4444))
+            contentColor = Color(0xFF7F1D1D)
+            statusText = "Likely Period"
+        }
+        todayInfo.fertility == FertilityStatus.FERTILE -> {
             gradColors = listOf(Color(0xFF10B981), GreenFertile, Color(0xFF047857))
             contentColor = Color.White
             statusText = "Fertile"
         }
-        FertilityStatus.COULD_BE_FERTILE -> {
+        todayInfo.fertility == FertilityStatus.COULD_BE_FERTILE -> {
             gradColors = listOf(Color(0xFFFDE047), YellowCouldBe, Color(0xFFF59E0B))
             contentColor = Color(0xFF451A03)
             statusText = "Could Be Fertile"
         }
-        FertilityStatus.NOT_FERTILE -> {
+        else -> {
             gradColors = listOf(Color(0xFF7DD3FC), BlueNotFertile, Color(0xFF0EA5E9))
             contentColor = Color(0xFF082F49)
             statusText = "Not Fertile"

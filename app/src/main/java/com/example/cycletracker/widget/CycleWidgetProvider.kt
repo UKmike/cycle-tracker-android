@@ -113,8 +113,26 @@ class CycleWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
 
-            val style = when (info.fertility) {
-                FertilityStatus.FERTILE -> WidgetStyle(
+            val style = when {
+                info.periodStatus == PeriodStatus.LOGGED_START ||
+                    info.periodStatus == PeriodStatus.LOGGED -> WidgetStyle(
+                    Color.parseColor("#EF4444"),
+                    COLOR_RED_PERIOD,
+                    Color.parseColor("#B91C1C"),
+                    Color.WHITE,
+                    Color.parseColor("#FEE2E2"),
+                    "Period"
+                )
+                info.periodStatus == PeriodStatus.PREDICTED_START ||
+                    info.periodStatus == PeriodStatus.PREDICTED -> WidgetStyle(
+                    Color.parseColor("#FCA5A5"),
+                    Color.parseColor("#F87171"),
+                    Color.parseColor("#EF4444"),
+                    Color.parseColor("#7F1D1D"),
+                    Color.parseColor("#991B1B"),
+                    "Likely Period"
+                )
+                info.fertility == FertilityStatus.FERTILE -> WidgetStyle(
                     Color.parseColor("#10B981"),
                     COLOR_GREEN,
                     Color.parseColor("#047857"),
@@ -122,7 +140,7 @@ class CycleWidgetProvider : AppWidgetProvider() {
                     Color.parseColor("#D1FAE5"),
                     "Fertile"
                 )
-                FertilityStatus.COULD_BE_FERTILE -> WidgetStyle(
+                info.fertility == FertilityStatus.COULD_BE_FERTILE -> WidgetStyle(
                     Color.parseColor("#FDE047"),
                     COLOR_YELLOW,
                     Color.parseColor("#F59E0B"),
@@ -130,7 +148,7 @@ class CycleWidgetProvider : AppWidgetProvider() {
                     Color.parseColor("#78350F"),
                     "Could Be Fertile"
                 )
-                FertilityStatus.NOT_FERTILE -> WidgetStyle(
+                else -> WidgetStyle(
                     Color.parseColor("#7DD3FC"),
                     COLOR_LIGHT_BLUE,
                     Color.parseColor("#0EA5E9"),

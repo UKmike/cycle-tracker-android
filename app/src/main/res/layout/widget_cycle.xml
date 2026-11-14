@@ -1,76 +1,91 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@drawable/widget_bg_blue"
-    android:orientation="vertical"
-    android:padding="12dp"
-    android:gravity="center">
+    android:layout_height="match_parent">
 
-    <TextView
-        android:id="@+id/widget_status_badge"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:maxLines="1"
-        android:ellipsize="end"
-        android:text="Not Fertile"
-        android:textColor="#FFFFFF"
-        android:textSize="12sp"
-        android:textStyle="bold"
-        android:letterSpacing="0.03" />
+    <ImageView
+        android:id="@+id/widget_bg_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:contentDescription="@null" />
 
     <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:orientation="horizontal"
-        android:gravity="bottom">
+        android:id="@+id/widget_content"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="12dp"
+        android:gravity="center">
 
         <TextView
-            android:id="@+id/widget_days_number"
+            android:id="@+id/widget_status_badge"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:maxLines="1"
-            android:text="--"
-            android:textColor="#FFFFFF"
-            android:textSize="32sp"
+            android:ellipsize="end"
+            android:text="Not Fertile"
+            android:textColor="#082F49"
+            android:textSize="12sp"
             android:textStyle="bold"
-            android:includeFontPadding="false" />
+            android:letterSpacing="0.03" />
 
-        <TextView
-            android:id="@+id/widget_days_unit"
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
-            android:layout_marginBottom="3dp"
+            android:layout_marginTop="2dp"
+            android:orientation="horizontal"
+            android:gravity="bottom">
+
+            <TextView
+                android:id="@+id/widget_days_number"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:maxLines="1"
+                android:text="--"
+                android:textColor="#082F49"
+                android:textSize="32sp"
+                android:textStyle="bold"
+                android:includeFontPadding="false" />
+
+            <TextView
+                android:id="@+id/widget_days_unit"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="4dp"
+                android:layout_marginBottom="3dp"
+                android:maxLines="1"
+                android:text="days"
+                android:textColor="#082F49"
+                android:textSize="13sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/widget_subtitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="1dp"
+            android:gravity="center"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:lineSpacingMultiplier="0.9"
+            android:text="to next period"
+            android:textColor="#082F49"
+            android:textSize="12sp" />
+
+        <TextView
+            android:id="@+id/widget_footer"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
             android:maxLines="1"
-            android:text="days"
-            android:textColor="#FFFFFF"
-            android:textSize="13sp"
-            android:textStyle="bold" />
+            android:ellipsize="end"
+            android:text="Tap to open Maya"
+            android:textColor="#0369A1"
+            android:textSize="11sp" />
+
     </LinearLayout>
 
-    <TextView
-        android:id="@+id/widget_subtitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
-        android:maxLines="1"
-        android:ellipsize="end"
-        android:text="to next period"
-        android:textColor="#FFFFFF"
-        android:textSize="12sp" />
-
-    <TextView
-        android:id="@+id/widget_footer"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:maxLines="1"
-        android:ellipsize="end"
-        android:text="Tap to open Maya"
-        android:textColor="#E5E7EB"
-        android:textSize="11sp" />
-
-</LinearLayout>
+</FrameLayout>

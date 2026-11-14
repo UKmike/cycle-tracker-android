@@ -285,8 +285,8 @@ private fun CalendarCard(
     val today = LocalDate.now()
     val monthTitle = month.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
     val firstOfMonth = month.atDay(1)
-    // Sunday = 0 .. Saturday = 6
-    val leadingEmpty = firstOfMonth.dayOfWeek.value % 7
+    // Monday = 0 .. Sunday = 6
+    val leadingEmpty = firstOfMonth.dayOfWeek.value - 1
     val daysInMonth = month.lengthOfMonth()
 
     Card(
@@ -319,7 +319,7 @@ private fun CalendarCard(
             }
 
             Row(modifier = Modifier.fillMaxWidth()) {
-                listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat").forEach { day ->
+                listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun").forEach { day ->
                     Text(
                         text = day,
                         modifier = Modifier.weight(1f),

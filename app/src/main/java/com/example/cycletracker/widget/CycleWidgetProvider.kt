@@ -81,8 +81,12 @@ class CycleWidgetProvider : AppWidgetProvider() {
 
             val views = RemoteViews(context.packageName, R.layout.widget_cycle)
 
-            // Launch MainActivity on tap
-            val launchIntent = Intent(context, MainActivity::class.java)
+            // Launch MainActivity on tap without duplicating it on the back stack
+            val launchIntent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
             val pendingIntent = PendingIntent.getActivity(
                 context,
                 0,

@@ -20,13 +20,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
@@ -35,6 +36,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +49,8 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,6 +74,7 @@ import com.example.cycletracker.domain.CycleModel
 import com.example.cycletracker.domain.DayClassification
 import com.example.cycletracker.domain.FertilityStatus
 import com.example.cycletracker.domain.PeriodStatus
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
@@ -461,11 +466,15 @@ private fun CalendarCard(
     onSelectDate: (LocalDate) -> Unit
 ) {
     val today = LocalDate.now()
-    val monthTitle = month.format(DateTimeFormatter.ofPattern("MMMM yyyy"))
-    val firstOfMonth = month.atDay(1)
-    // Monday = 0 .. Sunday = 6
-    val leadingEmpty = firstOfMonth.dayOfWeek.value - 1
-    val daysInMonth = month.lengthOfMonth()
+    val currentMonth = remember { YearMonth.from(today) }
+    val monthsPast = 12
+    val monthsFuture = 12
+    val months = remember(currentMonth) {
+        (-monthsPast..monthsFuture).map { offset -> currentMonth.plusMonths(offset.toLong()) }
+    }
+    val listState = rememberLazyListState(initialFirstVisibleItemIndex = monthsPast)
+    val coroutineScope = rememberCoroutineScope()
+    val monthFormatter = remember { DateTimeFormatter.ofPattern("MMMM yyyy") }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -479,20 +488,19 @@ private fun CalendarCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = monthTitle,
+                    text = "Calendar",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onPrevMonth) {
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous month")
+                TextButton(
+                    onClick = {
+                        onToday()
+                        coroutineScope.launch {
+                            listState.animateScrollToItem(monthsPast)
+                        }
                     }
-                    TextButton(onClick = onToday) {
-                        Text("Today", fontSize = 12.sp)
-                    }
-                    IconButton(onClick = onNextMonth) {
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next month")
-                    }
+                ) {
+                    Text("Today", fontSize = 12.sp)
                 }
             }
 
@@ -503,102 +511,39 @@ private fun CalendarCard(
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.Center,
                         fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
             Spacer(Modifier.height(6.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
 
-            val totalCells = leadingEmpty + daysInMonth
-            val rows = (totalCells + 6) / 7
-
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                for (r in 0 until rows) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        for (c in 0 until 7) {
-                            val cellIndex = r * 7 + c
-                            val dayNum = cellIndex - leadingEmpty + 1
-                            if (dayNum < 1 || dayNum > daysInMonth) {
-                                Box(modifier = Modifier.weight(1f).aspectRatio(1f))
-                            } else {
-                                val date = month.atDay(dayNum)
-                                val info = CycleCalculator.classifyDate(date, periodStarts, model)
-                                val isSelected = date == selectedDate
-                                val isToday = date == today
-
-                                val (cellBg, cellBorder, cellText) = when {
-                                    !model.hasData -> Triple(
-                                        MaterialTheme.colorScheme.surface,
-                                        MaterialTheme.colorScheme.outlineVariant,
-                                        MaterialTheme.colorScheme.onSurface
-                                    )
-                                    info.periodStatus == PeriodStatus.LOGGED_START ||
-                                        info.periodStatus == PeriodStatus.LOGGED -> Triple(
-                                        RedPeriod,
-                                        Color(0xFF991B1B),
-                                        Color.White
-                                    )
-                                    info.periodStatus == PeriodStatus.PREDICTED_START ||
-                                        info.periodStatus == PeriodStatus.PREDICTED -> Triple(
-                                        Color(0xFFFCA5A5),
-                                        RedPeriod,
-                                        Color(0xFF7F1D1D)
-                                    )
-                                    info.fertility == FertilityStatus.FERTILE -> Triple(
-                                        GreenFertile,
-                                        Color(0xFF047857),
-                                        Color.White
-                                    )
-                                    info.fertility == FertilityStatus.COULD_BE_FERTILE -> Triple(
-                                        YellowCouldBe,
-                                        Color(0xFFD97706),
-                                        Color(0xFF451A03)
-                                    )
-                                    else -> Triple(
-                                        BlueNotFertile,
-                                        Color(0xFF0284C7),
-                                        Color(0xFF082F49)
-                                    )
-                                }
-
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .aspectRatio(1f)
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(cellBg)
-                                        .border(
-                                            width = if (isSelected) 2.5.dp else 1.dp,
-                                            color = if (isSelected) MaterialTheme.colorScheme.onSurface else cellBorder,
-                                            shape = RoundedCornerShape(10.dp)
-                                        )
-                                        .clickable { onSelectDate(date) }
-                                        .padding(4.dp)
-                                ) {
-                                    Text(
-                                        text = dayNum.toString(),
-                                        fontSize = 12.sp,
-                                        fontWeight = if (isToday) FontWeight.ExtraBold else FontWeight.SemiBold,
-                                        color = cellText,
-                                        modifier = Modifier.align(Alignment.TopStart)
-                                    )
-                                    if (isToday) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(6.dp)
-                                                .clip(CircleShape)
-                                                .background(cellText)
-                                                .align(Alignment.BottomEnd)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(370.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                items(
+                    items = months,
+                    key = { it.toString() }
+                ) { itemMonth ->
+                    MonthSection(
+                        month = itemMonth,
+                        monthFormatter = monthFormatter,
+                        today = today,
+                        selectedDate = selectedDate,
+                        periodStarts = periodStarts,
+                        model = model,
+                        onSelectDate = onSelectDate
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                    )
                 }
             }
 
@@ -612,6 +557,127 @@ private fun CalendarCard(
                 LegendItem(YellowCouldBe, "Could be fertile")
                 LegendItem(BlueNotFertile, "Not fertile")
                 LegendItem(RedPeriod, "Period / Likely next")
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthSection(
+    month: YearMonth,
+    monthFormatter: DateTimeFormatter,
+    today: LocalDate,
+    selectedDate: LocalDate,
+    periodStarts: List<LocalDate>,
+    model: CycleModel,
+    onSelectDate: (LocalDate) -> Unit
+) {
+    val firstOfMonth = month.atDay(1)
+    // Monday = 0 .. Sunday = 6
+    val leadingEmpty = firstOfMonth.dayOfWeek.value - 1
+    val daysInMonth = month.lengthOfMonth()
+    val totalCells = leadingEmpty + daysInMonth
+    val rows = (totalCells + 6) / 7
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp)
+    ) {
+        Text(
+            text = month.format(monthFormatter),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (r in 0 until rows) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    for (c in 0 until 7) {
+                        val cellIndex = r * 7 + c
+                        val dayNum = cellIndex - leadingEmpty + 1
+                        if (dayNum < 1 || dayNum > daysInMonth) {
+                            Box(modifier = Modifier.weight(1f).aspectRatio(1f))
+                        } else {
+                            val date = month.atDay(dayNum)
+                            val info = CycleCalculator.classifyDate(date, periodStarts, model)
+                            val isSelected = date == selectedDate
+                            val isToday = date == today
+
+                            val (cellBg, cellBorder, cellText) = when {
+                                !model.hasData -> Triple(
+                                    MaterialTheme.colorScheme.surface,
+                                    MaterialTheme.colorScheme.outlineVariant,
+                                    MaterialTheme.colorScheme.onSurface
+                                )
+                                info.periodStatus == PeriodStatus.LOGGED_START ||
+                                    info.periodStatus == PeriodStatus.LOGGED -> Triple(
+                                    RedPeriod,
+                                    Color(0xFF991B1B),
+                                    Color.White
+                                )
+                                info.periodStatus == PeriodStatus.PREDICTED_START ||
+                                    info.periodStatus == PeriodStatus.PREDICTED -> Triple(
+                                    Color(0xFFFCA5A5),
+                                    RedPeriod,
+                                    Color(0xFF7F1D1D)
+                                )
+                                info.fertility == FertilityStatus.FERTILE -> Triple(
+                                    GreenFertile,
+                                    Color(0xFF047857),
+                                    Color.White
+                                )
+                                info.fertility == FertilityStatus.COULD_BE_FERTILE -> Triple(
+                                    YellowCouldBe,
+                                    Color(0xFFD97706),
+                                    Color(0xFF451A03)
+                                )
+                                else -> Triple(
+                                    BlueNotFertile,
+                                    Color(0xFF0284C7),
+                                    Color(0xFF082F49)
+                                )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .aspectRatio(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(cellBg)
+                                    .border(
+                                        width = if (isSelected) 2.5.dp else 1.dp,
+                                        color = if (isSelected) MaterialTheme.colorScheme.onSurface else cellBorder,
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable { onSelectDate(date) }
+                                    .padding(4.dp)
+                            ) {
+                                Text(
+                                    text = dayNum.toString(),
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isToday) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                    color = cellText,
+                                    modifier = Modifier.align(Alignment.TopStart)
+                                )
+                                if (isToday) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .clip(CircleShape)
+                                            .background(cellText)
+                                            .align(Alignment.BottomEnd)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

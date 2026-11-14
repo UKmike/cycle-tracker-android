@@ -1,6 +1,7 @@
 package com.example.cycletracker.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -48,7 +49,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathMeasure
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -130,7 +137,9 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
             // 1. Live Home Screen Widget Preview
             HomeWidgetPreviewCard(
                 todayInfo = state.todayClassification,
-                hasData = state.model.hasData
+                hasData = state.model.hasData,
+                periodStarts = state.periodStarts,
+                model = state.model
             )
 
             // 2. Interactive Calendar
@@ -170,7 +179,9 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
 @Composable
 private fun HomeWidgetPreviewCard(
     todayInfo: DayClassification,
-    hasData: Boolean
+    hasData: Boolean,
+    periodStarts: List<LocalDate>,
+    model: CycleModel
 ) {
     val bgColor: Color
     val contentColor: Color
@@ -194,77 +205,214 @@ private fun HomeWidgetPreviewCard(
         }
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = bgColor)
+    val cycleColors: List<Color> = if (hasData && periodStarts.isNotEmpty()) {
+        val cycleStart = periodStarts.sorted().last()
+        val cycleLen = model.averageCycleLength.coerceAtLeast(1)
+        (0 until cycleLen).map { offset ->
+            val dayInfo = CycleCalculator.classifyDate(
+                date = cycleStart.plusDays(offset.toLong()),
+                periodStarts = periodStarts,
+                model = model
+            )
+            when {
+                dayInfo.periodStatus == PeriodStatus.LOGGED_START ||
+                    dayInfo.periodStatus == PeriodStatus.LOGGED -> RedPeriod
+                dayInfo.fertility == FertilityStatus.FERTILE -> GreenFertile
+                dayInfo.fertility == FertilityStatus.COULD_BE_FERTILE -> YellowCouldBe
+                else -> BlueNotFertile
+            }
+        }
+    } else {
+        emptyList()
+    }
+
+    val ringBackingColor = MaterialTheme.colorScheme.surface
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(4.dp)
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    color = contentColor.copy(alpha = 0.18f),
-                    shape = RoundedCornerShape(50)
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(6.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = bgColor)
+        ) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Surface(
+                        color = contentColor.copy(alpha = 0.18f),
+                        shape = RoundedCornerShape(50)
+                    ) {
+                        Text(
+                            text = statusText,
+                            color = contentColor,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
                     Text(
-                        text = statusText,
-                        color = contentColor,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        text = "Home Widget",
+                        color = contentColor.copy(alpha = 0.75f),
+                        fontSize = 11.sp
                     )
                 }
+
+                Spacer(Modifier.height(14.dp))
+
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(
+                        text = if (hasData && todayInfo.daysToNextPeriod != null) {
+                            todayInfo.daysToNextPeriod.toString()
+                        } else "--",
+                        color = contentColor,
+                        fontSize = 44.sp,
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 44.sp
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = if (todayInfo.daysToNextPeriod == 1) "day" else "days",
+                        color = contentColor.copy(alpha = 0.9f),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                }
+
                 Text(
-                    text = "Home Widget",
-                    color = contentColor.copy(alpha = 0.75f),
-                    fontSize = 11.sp
+                    text = when {
+                        !hasData -> "Log your last period start to begin"
+                        todayInfo.daysToNextPeriod == 0 -> "Period expected today"
+                        else -> "to next period"
+                    },
+                    color = contentColor.copy(alpha = 0.92f),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
                 )
+
+                if (hasData && todayInfo.nextPeriodDate != null) {
+                    Spacer(Modifier.height(12.dp))
+                    val fmt = DateTimeFormatter.ofPattern("MMM d")
+                    Text(
+                        text = "Cycle Day ${todayInfo.cycleDay}  •  Next period: ${todayInfo.nextPeriodDate.format(fmt)}",
+                        color = contentColor.copy(alpha = 0.85f),
+                        fontSize = 12.sp
+                    )
+                }
             }
+        }
 
-            Spacer(Modifier.height(14.dp))
-
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    text = if (hasData && todayInfo.daysToNextPeriod != null) {
-                        todayInfo.daysToNextPeriod.toString()
-                    } else "--",
-                    color = contentColor,
-                    fontSize = 44.sp,
-                    fontWeight = FontWeight.Bold,
-                    lineHeight = 44.sp
+        if (cycleColors.isNotEmpty()) {
+            Canvas(modifier = Modifier.matchParentSize()) {
+                val strokeWidth = 6.dp.toPx()
+                val inset = strokeWidth / 2f
+                val cornerRadius = 28.dp.toPx().coerceAtMost(
+                    (size.minDimension - strokeWidth) / 2f
                 )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = if (todayInfo.daysToNextPeriod == 1) "day" else "days",
-                    color = contentColor.copy(alpha = 0.9f),
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(bottom = 6.dp)
-                )
-            }
+                val left = inset
+                val top = inset
+                val right = size.width - inset
+                val bottom = size.height - inset
+                val midX = size.width / 2f
 
-            Text(
-                text = when {
-                    !hasData -> "Log your last period start to begin"
-                    todayInfo.daysToNextPeriod == 0 -> "Period expected today"
-                    else -> "to next period"
-                },
-                color = contentColor.copy(alpha = 0.92f),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium
-            )
+                // Build rounded-rectangle perimeter starting at top-center (period start) clockwise
+                val perimeter = Path().apply {
+                    moveTo(midX, top)
+                    lineTo(right - cornerRadius, top)
+                    arcTo(
+                        rect = Rect(right - 2 * cornerRadius, top, right, top + 2 * cornerRadius),
+                        startAngleDegrees = -90f,
+                        sweepAngleDegrees = 90f,
+                        forceMoveTo = false
+                    )
+                    lineTo(right, bottom - cornerRadius)
+                    arcTo(
+                        rect = Rect(right - 2 * cornerRadius, bottom - 2 * cornerRadius, right, bottom),
+                        startAngleDegrees = 0f,
+                        sweepAngleDegrees = 90f,
+                        forceMoveTo = false
+                    )
+                    lineTo(left + cornerRadius, bottom)
+                    arcTo(
+                        rect = Rect(left, bottom - 2 * cornerRadius, left + 2 * cornerRadius, bottom),
+                        startAngleDegrees = 90f,
+                        sweepAngleDegrees = 90f,
+                        forceMoveTo = false
+                    )
+                    lineTo(left, top + cornerRadius)
+                    arcTo(
+                        rect = Rect(left, top, left + 2 * cornerRadius, top + 2 * cornerRadius),
+                        startAngleDegrees = 180f,
+                        sweepAngleDegrees = 90f,
+                        forceMoveTo = false
+                    )
+                    lineTo(midX, top)
+                }
 
-            if (hasData && todayInfo.nextPeriodDate != null) {
-                Spacer(Modifier.height(12.dp))
-                val fmt = DateTimeFormatter.ofPattern("MMM d")
-                Text(
-                    text = "Cycle Day ${todayInfo.cycleDay}  •  Next period: ${todayInfo.nextPeriodDate.format(fmt)}",
-                    color = contentColor.copy(alpha = 0.85f),
-                    fontSize = 12.sp
+                val pathMeasure = PathMeasure()
+                pathMeasure.setPath(perimeter, forceClosed = false)
+                val totalLength = pathMeasure.length
+                val count = cycleColors.size
+                val segmentPath = Path()
+
+                // Subtle backing track so colored segments pop against the card edge
+                drawPath(
+                    path = perimeter,
+                    color = ringBackingColor,
+                    style = Stroke(width = strokeWidth + 3.dp.toPx(), cap = StrokeCap.Butt)
                 )
+
+                cycleColors.forEachIndexed { index, color ->
+                    val startDist = totalLength * index / count
+                    val endDist = totalLength * (index + 1) / count
+                    segmentPath.reset()
+                    pathMeasure.getSegment(startDist, endDist, segmentPath, startWithMoveTo = true)
+                    drawPath(
+                        path = segmentPath,
+                        color = color,
+                        style = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
+                    )
+                }
+
+                // Top-center tick marking Cycle Day 1 (period start)
+                drawLine(
+                    color = Color.White,
+                    start = Offset(midX, top - strokeWidth * 0.6f),
+                    end = Offset(midX, top + strokeWidth * 0.6f),
+                    strokeWidth = 2.dp.toPx(),
+                    cap = StrokeCap.Round
+                )
+
+                // Highlight current cycle day on the outline
+                val currentDay = todayInfo.cycleDay
+                if (currentDay != null) {
+                    val clampedIndex = ((currentDay - 1) % count + count) % count
+                    val midDist = totalLength * (clampedIndex + 0.5f) / count
+                    val markerPos = pathMeasure.getPosition(midDist)
+                    drawCircle(
+                        color = Color.White,
+                        radius = 8.5.dp.toPx(),
+                        center = markerPos
+                    )
+                    drawCircle(
+                        color = Color(0xFF111827),
+                        radius = 6.dp.toPx(),
+                        center = markerPos
+                    )
+                    drawCircle(
+                        color = cycleColors[clampedIndex],
+                        radius = 3.5.dp.toPx(),
+                        center = markerPos
+                    )
+                }
             }
         }
     }

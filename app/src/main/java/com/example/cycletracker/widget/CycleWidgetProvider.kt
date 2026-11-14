@@ -9,10 +9,12 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PathMeasure
 import android.graphics.RectF
+import android.graphics.Shader
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.View
@@ -113,19 +115,25 @@ class CycleWidgetProvider : AppWidgetProvider() {
 
             val style = when (info.fertility) {
                 FertilityStatus.FERTILE -> WidgetStyle(
+                    Color.parseColor("#10B981"),
                     COLOR_GREEN,
+                    Color.parseColor("#047857"),
                     Color.WHITE,
                     Color.parseColor("#D1FAE5"),
                     "Fertile"
                 )
                 FertilityStatus.COULD_BE_FERTILE -> WidgetStyle(
+                    Color.parseColor("#FDE047"),
                     COLOR_YELLOW,
+                    Color.parseColor("#F59E0B"),
                     Color.parseColor("#451A03"),
                     Color.parseColor("#78350F"),
                     "Could Be Fertile"
                 )
                 FertilityStatus.NOT_FERTILE -> WidgetStyle(
+                    Color.parseColor("#7DD3FC"),
                     COLOR_LIGHT_BLUE,
+                    Color.parseColor("#0EA5E9"),
                     Color.parseColor("#082F49"),
                     Color.parseColor("#0369A1"),
                     "Not Fertile"
@@ -138,13 +146,15 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 max(minHeightDp, 56)
             )
 
-            // Render rounded card + cycle perimeter outline + current day marker
+            // Render rounded card + gradient + frosted glass sheen + cycle outline
             val bgBitmap = renderWidgetBackgroundBitmap(
                 context = context,
                 widthDp = portraitWidthDp,
                 heightDp = portraitHeightDp,
                 isCompact = isCompact1x1,
-                fillColor = style.fillColor,
+                gradStart = style.gradStart,
+                gradMid = style.gradMid,
+                gradEnd = style.gradEnd,
                 periodStarts = starts,
                 model = model,
                 todayInfo = info
@@ -218,7 +228,9 @@ class CycleWidgetProvider : AppWidgetProvider() {
             widthDp: Int,
             heightDp: Int,
             isCompact: Boolean,
-            fillColor: Int,
+            gradStart: Int,
+            gradMid: Int,
+            gradEnd: Int,
             periodStarts: List<LocalDate>,
             model: CycleModel,
             todayInfo: DayClassification
@@ -251,13 +263,52 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 outerCorner - (cardInset - ringInset)
             )
 
-            // 1. Draw solid inner rounded card fill (matches HomeWidgetPreviewCard inset + 24dp feel)
+            // 1. Draw diagonal gradient rounded card fill + frosted glass sheen + specular border
             val cardRect = RectF(cardInset, cardInset, w - cardInset, h - cardInset)
             val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.FILL
-                color = fillColor
+                shader = LinearGradient(
+                    cardRect.left, cardRect.top,
+                    cardRect.right, cardRect.bottom,
+                    intArrayOf(gradStart, gradMid, gradEnd),
+                    floatArrayOf(0f, 0.55f, 1f),
+                    Shader.TileMode.CLAMP
+                )
             }
             canvas.drawRoundRect(cardRect, innerCorner, innerCorner, fillPaint)
+
+            // Frosted top-left glass sheen
+            val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.FILL
+                shader = LinearGradient(
+                    cardRect.left, cardRect.top,
+                    cardRect.left, cardRect.top + cardRect.height() * 0.65f,
+                    intArrayOf(Color.argb(72, 255, 255, 255), Color.TRANSPARENT),
+                    null,
+                    Shader.TileMode.CLAMP
+                )
+            }
+            canvas.drawRoundRect(cardRect, innerCorner, innerCorner, sheenPaint)
+
+            // Delicate inner specular glass border
+            val glassBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                style = Paint.Style.STROKE
+                this.strokeWidth = 1.2f * dp
+                shader = LinearGradient(
+                    cardRect.left, cardRect.top,
+                    cardRect.right, cardRect.bottom,
+                    intArrayOf(Color.argb(120, 255, 255, 255), Color.argb(30, 255, 255, 255)),
+                    null,
+                    Shader.TileMode.CLAMP
+                )
+            }
+            val borderRect = RectF(
+                cardRect.left + 0.6f * dp,
+                cardRect.top + 0.6f * dp,
+                cardRect.right - 0.6f * dp,
+                cardRect.bottom - 0.6f * dp
+            )
+            canvas.drawRoundRect(borderRect, innerCorner, innerCorner, glassBorderPaint)
 
             // 2. If cycle data exists, draw the cycle-colored perimeter outline starting at top-center
             if (model.hasData && periodStarts.isNotEmpty()) {
@@ -370,7 +421,9 @@ class CycleWidgetProvider : AppWidgetProvider() {
         }
 
         private data class WidgetStyle(
-            val fillColor: Int,
+            val gradStart: Int,
+            val gradMid: Int,
+            val gradEnd: Int,
             val textColor: Int,
             val footerColor: Int,
             val statusLabel: String

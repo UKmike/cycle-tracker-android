@@ -155,14 +155,15 @@ class CycleWidgetProvider : AppWidgetProvider() {
             // Adapt layout density for 1x1 vs larger sizes
             if (isCompact1x1) {
                 val padPx = TypedValue.applyDimension(
-                    TypedValue.COMPLEX_UNIT_DIP, 8f, context.resources.displayMetrics
+                    TypedValue.COMPLEX_UNIT_DIP, 7f, context.resources.displayMetrics
                 ).toInt()
                 views.setViewPadding(R.id.widget_content, padPx, padPx, padPx, padPx)
                 views.setViewVisibility(R.id.widget_status_badge, View.GONE)
-                views.setViewVisibility(R.id.widget_days_unit, View.GONE)
+                views.setViewVisibility(R.id.widget_days_unit, View.VISIBLE)
                 views.setViewVisibility(R.id.widget_footer, View.GONE)
-                views.setTextViewTextSize(R.id.widget_days_number, TypedValue.COMPLEX_UNIT_SP, 18f)
-                views.setTextViewTextSize(R.id.widget_subtitle, TypedValue.COMPLEX_UNIT_SP, 9.5f)
+                views.setTextViewTextSize(R.id.widget_days_number, TypedValue.COMPLEX_UNIT_SP, 16f)
+                views.setTextViewTextSize(R.id.widget_days_unit, TypedValue.COMPLEX_UNIT_SP, 10.5f)
+                views.setTextViewTextSize(R.id.widget_subtitle, TypedValue.COMPLEX_UNIT_SP, 9f)
             } else {
                 val padPx = TypedValue.applyDimension(
                     TypedValue.COMPLEX_UNIT_DIP, 16f, context.resources.displayMetrics
@@ -172,6 +173,7 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 views.setViewVisibility(R.id.widget_days_unit, View.VISIBLE)
                 views.setViewVisibility(R.id.widget_footer, View.VISIBLE)
                 views.setTextViewTextSize(R.id.widget_days_number, TypedValue.COMPLEX_UNIT_SP, 34f)
+                views.setTextViewTextSize(R.id.widget_days_unit, TypedValue.COMPLEX_UNIT_SP, 13f)
                 views.setTextViewTextSize(R.id.widget_subtitle, TypedValue.COMPLEX_UNIT_SP, 12f)
             }
 
@@ -180,7 +182,7 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.widget_days_unit, "days")
                 views.setTextViewText(
                     R.id.widget_subtitle,
-                    if (isCompact1x1) "days to\nnext period" else "to next period"
+                    if (isCompact1x1) "to next\nperiod" else "to next period"
                 )
                 views.setTextViewText(R.id.widget_footer, "Tap to log period")
             } else {
@@ -191,7 +193,7 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(
                     R.id.widget_subtitle,
                     when {
-                        isCompact1x1 -> if (days == 0) "period\ntoday" else "$unit to\nnext period"
+                        isCompact1x1 -> if (days == 0) "expected\ntoday" else "to next\nperiod"
                         days == 0 -> "period expected today"
                         else -> "to next period"
                     }

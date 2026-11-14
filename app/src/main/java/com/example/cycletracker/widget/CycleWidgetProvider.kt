@@ -132,11 +132,17 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 )
             }
 
+            val portraitWidthDp = max(minWidthDp, 56)
+            val portraitHeightDp = max(
+                options.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, minHeightDp),
+                max(minHeightDp, 56)
+            )
+
             // Render rounded card + cycle perimeter outline + current day marker
             val bgBitmap = renderWidgetBackgroundBitmap(
                 context = context,
-                widthDp = max(minWidthDp, 56),
-                heightDp = max(minHeightDp, 56),
+                widthDp = portraitWidthDp,
+                heightDp = portraitHeightDp,
                 isCompact = isCompact1x1,
                 fillColor = style.fillColor,
                 periodStarts = starts,
@@ -155,18 +161,18 @@ class CycleWidgetProvider : AppWidgetProvider() {
             // Adapt layout density for 1x1 vs larger sizes
             if (isCompact1x1) {
                 val padPx = TypedValue.applyDimension(
-                    TypedValue.COMPLEX_UNIT_DIP, 7f, context.resources.displayMetrics
+                    TypedValue.COMPLEX_UNIT_DIP, 10f, context.resources.displayMetrics
                 ).toInt()
                 views.setViewPadding(R.id.widget_content, padPx, padPx, padPx, padPx)
                 views.setViewVisibility(R.id.widget_status_badge, View.GONE)
                 views.setViewVisibility(R.id.widget_days_unit, View.VISIBLE)
                 views.setViewVisibility(R.id.widget_footer, View.GONE)
-                views.setTextViewTextSize(R.id.widget_days_number, TypedValue.COMPLEX_UNIT_SP, 16f)
-                views.setTextViewTextSize(R.id.widget_days_unit, TypedValue.COMPLEX_UNIT_SP, 10.5f)
-                views.setTextViewTextSize(R.id.widget_subtitle, TypedValue.COMPLEX_UNIT_SP, 9f)
+                views.setTextViewTextSize(R.id.widget_days_number, TypedValue.COMPLEX_UNIT_SP, 15f)
+                views.setTextViewTextSize(R.id.widget_days_unit, TypedValue.COMPLEX_UNIT_SP, 10f)
+                views.setTextViewTextSize(R.id.widget_subtitle, TypedValue.COMPLEX_UNIT_SP, 8.5f)
             } else {
                 val padPx = TypedValue.applyDimension(
-                    TypedValue.COMPLEX_UNIT_DIP, 16f, context.resources.displayMetrics
+                    TypedValue.COMPLEX_UNIT_DIP, 20f, context.resources.displayMetrics
                 ).toInt()
                 views.setViewPadding(R.id.widget_content, padPx, padPx, padPx, padPx)
                 views.setViewVisibility(R.id.widget_status_badge, View.VISIBLE)
@@ -219,37 +225,38 @@ class CycleWidgetProvider : AppWidgetProvider() {
         ): Bitmap {
             val density = context.resources.displayMetrics.density
             // Cap bitmap dimensions to keep RemoteViews memory low while staying crisp
-            val maxDim = 540f
+            val maxDim = 600f
             val rawW = widthDp * density
             val rawH = heightDp * density
             val scale = min(1f, maxDim / max(rawW, rawH))
-            val w = max(120, (rawW * scale).toInt())
-            val h = max(120, (rawH * scale).toInt())
+            val w = max(140, (rawW * scale).toInt())
+            val h = max(140, (rawH * scale).toInt())
             val dp = density * scale
 
             val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
 
-            val strokeWidth = (if (isCompact) 4f else 6f) * dp
-            val outerPad = (if (isCompact) 4.5f else 6.5f) * dp
-            val inset = outerPad
-            val cornerRadius = min(
-                (if (isCompact) 18f else 24f) * dp,
-                (min(w, h) - inset * 2f) / 2f
+            val strokeWidth = (if (isCompact) 4.2f else 6f) * dp
+            val markerOverflow = (if (isCompact) 3.5f else 5.5f) * dp
+            val ringInset = markerOverflow + strokeWidth / 2f
+            val cardGap = (if (isCompact) 1.5f else 2.5f) * dp
+            val cardInset = ringInset + strokeWidth / 2f + cardGap
+
+            val outerCorner = min(
+                (if (isCompact) 18f else 28f) * dp,
+                (min(w, h) - ringInset * 2f) / 2f
+            )
+            val innerCorner = max(
+                4f * dp,
+                outerCorner - (cardInset - ringInset)
             )
 
-            // 1. Draw solid inner rounded card fill
-            val cardRect = RectF(
-                inset + strokeWidth * 0.65f,
-                inset + strokeWidth * 0.65f,
-                w - inset - strokeWidth * 0.65f,
-                h - inset - strokeWidth * 0.65f
-            )
+            // 1. Draw solid inner rounded card fill (matches HomeWidgetPreviewCard inset + 24dp feel)
+            val cardRect = RectF(cardInset, cardInset, w - cardInset, h - cardInset)
             val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.FILL
                 color = fillColor
             }
-            val innerCorner = max(4f * dp, cornerRadius - strokeWidth * 0.5f)
             canvas.drawRoundRect(cardRect, innerCorner, innerCorner, fillPaint)
 
             // 2. If cycle data exists, draw the cycle-colored perimeter outline starting at top-center
@@ -272,44 +279,36 @@ class CycleWidgetProvider : AppWidgetProvider() {
                     }
                 }
 
-                val left = inset
-                val top = inset
-                val right = w - inset
-                val bottom = h - inset
+                val left = ringInset
+                val top = ringInset
+                val right = w - ringInset
+                val bottom = h - ringInset
                 val midX = w / 2f
 
                 val perimeter = Path().apply {
                     moveTo(midX, top)
-                    lineTo(right - cornerRadius, top)
+                    lineTo(right - outerCorner, top)
                     arcTo(
-                        RectF(right - 2 * cornerRadius, top, right, top + 2 * cornerRadius),
+                        RectF(right - 2 * outerCorner, top, right, top + 2 * outerCorner),
                         -90f, 90f, false
                     )
-                    lineTo(right, bottom - cornerRadius)
+                    lineTo(right, bottom - outerCorner)
                     arcTo(
-                        RectF(right - 2 * cornerRadius, bottom - 2 * cornerRadius, right, bottom),
+                        RectF(right - 2 * outerCorner, bottom - 2 * outerCorner, right, bottom),
                         0f, 90f, false
                     )
-                    lineTo(left + cornerRadius, bottom)
+                    lineTo(left + outerCorner, bottom)
                     arcTo(
-                        RectF(left, bottom - 2 * cornerRadius, left + 2 * cornerRadius, bottom),
+                        RectF(left, bottom - 2 * outerCorner, left + 2 * outerCorner, bottom),
                         90f, 90f, false
                     )
-                    lineTo(left, top + cornerRadius)
+                    lineTo(left, top + outerCorner)
                     arcTo(
-                        RectF(left, top, left + 2 * cornerRadius, top + 2 * cornerRadius),
+                        RectF(left, top, left + 2 * outerCorner, top + 2 * outerCorner),
                         180f, 90f, false
                     )
                     lineTo(midX, top)
                 }
-
-                // Backing track so outline segments stand out cleanly
-                val backingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    style = Paint.Style.STROKE
-                    this.strokeWidth = strokeWidth + 2.5f * dp
-                    color = Color.WHITE
-                }
-                canvas.drawPath(perimeter, backingPaint)
 
                 val pm = PathMeasure(perimeter, false)
                 val totalLength = pm.length
@@ -333,17 +332,17 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 // Top-center tick marking Cycle Day 1 (period start)
                 val tickPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     style = Paint.Style.STROKE
-                    this.strokeWidth = (if (isCompact) 1.5f else 2f) * dp
+                    this.strokeWidth = (if (isCompact) 1.6f else 2f) * dp
                     strokeCap = Paint.Cap.ROUND
                     color = Color.WHITE
                 }
                 canvas.drawLine(
-                    midX, top - strokeWidth * 0.55f,
-                    midX, top + strokeWidth * 0.55f,
+                    midX, top - strokeWidth * 0.6f,
+                    midX, top + strokeWidth * 0.6f,
                     tickPaint
                 )
 
-                // Highlight current cycle day on the outline
+                // Highlight current cycle day on the outline (same 3-layer marker as app)
                 val currentDay = todayInfo.cycleDay
                 if (currentDay != null) {
                     val clampedIndex = ((currentDay - 1) % count + count) % count
@@ -354,9 +353,9 @@ class CycleWidgetProvider : AppWidgetProvider() {
                     val markerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         style = Paint.Style.FILL
                     }
-                    val outerR = (if (isCompact) 5f else 8f) * dp
-                    val midR = (if (isCompact) 3.6f else 5.8f) * dp
-                    val innerR = (if (isCompact) 2f else 3.2f) * dp
+                    val outerR = (if (isCompact) 5.2f else 8.5f) * dp
+                    val midR = (if (isCompact) 3.7f else 6f) * dp
+                    val innerR = (if (isCompact) 2.1f else 3.5f) * dp
 
                     markerPaint.color = Color.WHITE
                     canvas.drawCircle(pos[0], pos[1], outerR, markerPaint)

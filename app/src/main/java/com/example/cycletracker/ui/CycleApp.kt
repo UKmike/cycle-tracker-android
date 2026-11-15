@@ -749,8 +749,43 @@ private fun MonthSection(
                                             .size(6.dp)
                                             .clip(CircleShape)
                                             .background(cellText)
-                                            .align(Alignment.BottomEnd)
+                                            .align(Alignment.TopEnd)
                                     )
+                                }
+                                if (info.periodStatus == PeriodStatus.LOGGED_START) {
+                                    Canvas(
+                                        modifier = Modifier
+                                            .size(10.dp)
+                                            .align(Alignment.BottomEnd)
+                                    ) {
+                                        val w = size.width
+                                        val h = size.height
+                                        val drop = Path().apply {
+                                            moveTo(w * 0.5f, 0f)
+                                            cubicTo(
+                                                w * 0.5f, 0f,
+                                                w * 0.92f, h * 0.45f,
+                                                w * 0.92f, h * 0.66f
+                                            )
+                                            cubicTo(
+                                                w * 0.92f, h * 0.87f,
+                                                w * 0.73f, h,
+                                                w * 0.5f, h
+                                            )
+                                            cubicTo(
+                                                w * 0.27f, h,
+                                                w * 0.08f, h * 0.87f,
+                                                w * 0.08f, h * 0.66f
+                                            )
+                                            cubicTo(
+                                                w * 0.08f, h * 0.45f,
+                                                w * 0.5f, 0f,
+                                                w * 0.5f, 0f
+                                            )
+                                            close()
+                                        }
+                                        drawPath(path = drop, color = Color.White)
+                                    }
                                 }
                             }
                         }

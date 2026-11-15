@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -41,17 +42,21 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -92,6 +97,7 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
     val state by viewModel.uiState.collectAsState()
     val today = LocalDate.now()
     val isTodayLogged = state.periodStarts.contains(today)
+    var showDetailsSheet by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -118,6 +124,12 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
                         TextButton(onClick = { viewModel.loadSampleHistory() }) {
                             Text("Sample")
                         }
+                    }
+                    IconButton(onClick = { showDetailsSheet = true }) {
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = "Cycle Insights & History"
+                        )
                     }
                 }
             )
@@ -146,9 +158,8 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 84.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // 1. Live Home Screen Widget Preview
             HomeWidgetPreviewCard(
@@ -158,36 +169,38 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
                 model = state.model
             )
 
-            // 2. Interactive Calendar
+            // 2. Merged Interactive Calendar + Selected Day Section (fills remaining height)
             CalendarCard(
-                month = state.currentMonth,
+                modifier = Modifier.weight(1f),
                 selectedDate = state.selectedDate,
                 periodStarts = state.periodStarts,
                 model = state.model,
-                onPrevMonth = viewModel::previousMonth,
-                onNextMonth = viewModel::nextMonth,
                 onToday = viewModel::goToToday,
-                onSelectDate = viewModel::selectDate
-            )
-
-            // 3. Selected Day Action Bar
-            SelectedDayCard(
-                selectedDate = state.selectedDate,
-                periodStarts = state.periodStarts,
-                model = state.model,
+                onSelectDate = viewModel::selectDate,
                 onTogglePeriodStart = { viewModel.togglePeriodStart(state.selectedDate) }
             )
+        }
 
-            // 4. Adaptive Cycle Insights
-            InsightsCard(model = state.model)
-
-            // 5. Period History
-            HistoryCard(
-                periodStarts = state.periodStarts,
-                onRemove = viewModel::removePeriodStart
-            )
-
-            Spacer(Modifier.height(80.dp))
+        if (showDetailsSheet) {
+            ModalBottomSheet(
+                onDismissRequest = { showDetailsSheet = false },
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    InsightsCard(model = state.model)
+                    HistoryCard(
+                        periodStarts = state.periodStarts,
+                        onRemove = viewModel::removePeriodStart
+                    )
+                    Spacer(Modifier.height(24.dp))
+                }
+            }
         }
     }
 }
@@ -283,7 +296,7 @@ private fun HomeWidgetPreviewCard(
                     shape = RoundedCornerShape(24.dp)
                 )
         ) {
-            Column(modifier = Modifier.padding(20.dp)) {
+            Column(modifier = Modifier.padding(14.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -296,9 +309,9 @@ private fun HomeWidgetPreviewCard(
                         Text(
                             text = statusText,
                             color = contentColor,
-                            fontSize = 12.sp,
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
                         )
                     }
                     Text(
@@ -308,7 +321,7 @@ private fun HomeWidgetPreviewCard(
                     )
                 }
 
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(8.dp))
 
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
@@ -316,17 +329,17 @@ private fun HomeWidgetPreviewCard(
                             todayInfo.daysToNextPeriod.toString()
                         } else "--",
                         color = contentColor,
-                        fontSize = 44.sp,
+                        fontSize = 36.sp,
                         fontWeight = FontWeight.Bold,
-                        lineHeight = 44.sp
+                        lineHeight = 36.sp
                     )
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(6.dp))
                     Text(
                         text = if (todayInfo.daysToNextPeriod == 1) "day" else "days",
                         color = contentColor.copy(alpha = 0.9f),
-                        fontSize = 16.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(bottom = 6.dp)
+                        modifier = Modifier.padding(bottom = 4.dp)
                     )
                 }
 
@@ -337,17 +350,17 @@ private fun HomeWidgetPreviewCard(
                         else -> "to next period"
                     },
                     color = contentColor.copy(alpha = 0.92f),
-                    fontSize = 14.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.Medium
                 )
 
                 if (hasData && todayInfo.nextPeriodDate != null) {
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(6.dp))
                     val fmt = DateTimeFormatter.ofPattern("MMM d")
                     Text(
                         text = "Cycle Day ${todayInfo.cycleDay}  •  Next period: ${todayInfo.nextPeriodDate.format(fmt)}",
                         color = contentColor.copy(alpha = 0.85f),
-                        fontSize = 12.sp
+                        fontSize = 11.sp
                     )
                 }
             }
@@ -464,14 +477,13 @@ private fun HomeWidgetPreviewCard(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CalendarCard(
-    month: YearMonth,
+    modifier: Modifier = Modifier,
     selectedDate: LocalDate,
     periodStarts: List<LocalDate>,
     model: CycleModel,
-    onPrevMonth: () -> Unit,
-    onNextMonth: () -> Unit,
     onToday: () -> Unit,
-    onSelectDate: (LocalDate) -> Unit
+    onSelectDate: (LocalDate) -> Unit,
+    onTogglePeriodStart: () -> Unit
 ) {
     val today = LocalDate.now()
     val currentMonth = remember { YearMonth.from(today) }
@@ -484,12 +496,20 @@ private fun CalendarCard(
     val coroutineScope = rememberCoroutineScope()
     val monthFormatter = remember { DateTimeFormatter.ofPattern("MMMM yyyy") }
 
+    val selectedInfo = CycleCalculator.classifyDate(selectedDate, periodStarts, model)
+    val isLoggedStart = periodStarts.contains(selectedDate)
+    val selectedDateFmt = remember { DateTimeFormatter.ofPattern("EEE, MMM d") }
+
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -497,7 +517,7 @@ private fun CalendarCard(
             ) {
                 Text(
                     text = "Calendar",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
                 TextButton(
@@ -506,7 +526,8 @@ private fun CalendarCard(
                         coroutineScope.launch {
                             listState.animateScrollToItem(monthsPast)
                         }
-                    }
+                    },
+                    modifier = Modifier.height(30.dp)
                 ) {
                     Text("Today", fontSize = 12.sp)
                 }
@@ -525,15 +546,15 @@ private fun CalendarCard(
                 }
             }
 
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(4.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
 
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(370.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                    .weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(
                     items = months,
@@ -548,23 +569,72 @@ private fun CalendarCard(
                         model = model,
                         onSelectDate = onSelectDate
                     )
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(8.dp))
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
                     )
                 }
             }
 
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
 
             FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 LegendItem(GreenFertile, "Fertile")
-                LegendItem(YellowCouldBe, "Could be fertile")
+                LegendItem(YellowCouldBe, "Could be")
                 LegendItem(BlueNotFertile, "Not fertile")
-                LegendItem(RedPeriod, "Period / Likely next")
+                LegendItem(RedPeriod, "Period")
+            }
+
+            Spacer(Modifier.height(8.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+            Spacer(Modifier.height(8.dp))
+
+            // Merged Selected Day Action Bar
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = selectedDate.format(selectedDateFmt),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    val statusLabel = when {
+                        !model.hasData -> "Tap 'Period Started' to begin"
+                        selectedInfo.periodStatus == PeriodStatus.LOGGED_START -> "Period Start • Day ${selectedInfo.cycleDay}"
+                        selectedInfo.periodStatus == PeriodStatus.LOGGED -> "Period • Day ${selectedInfo.cycleDay}"
+                        selectedInfo.periodStatus == PeriodStatus.PREDICTED_START ||
+                            selectedInfo.periodStatus == PeriodStatus.PREDICTED -> "Likely Period • Day ${selectedInfo.cycleDay}"
+                        selectedInfo.fertility == FertilityStatus.FERTILE -> "Fertile • Day ${selectedInfo.cycleDay}"
+                        selectedInfo.fertility == FertilityStatus.COULD_BE_FERTILE -> "Could Be Fertile • Day ${selectedInfo.cycleDay}"
+                        else -> "Not Fertile • Day ${selectedInfo.cycleDay}"
+                    }
+                    Text(
+                        text = statusLabel,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Spacer(Modifier.width(8.dp))
+
+                if (isLoggedStart) {
+                    OutlinedButton(onClick = onTogglePeriodStart) {
+                        Text("Remove", fontSize = 12.sp)
+                    }
+                } else {
+                    Button(
+                        onClick = onTogglePeriodStart,
+                        colors = ButtonDefaults.buttonColors(containerColor = RedPeriod, contentColor = Color.White)
+                    ) {
+                        Text("Period Started", fontSize = 12.sp)
+                    }
+                }
             }
         }
     }
@@ -706,71 +776,6 @@ private fun LegendItem(color: Color, label: String) {
             fontSize = 11.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-    }
-}
-
-@Composable
-private fun SelectedDayCard(
-    selectedDate: LocalDate,
-    periodStarts: List<LocalDate>,
-    model: CycleModel,
-    onTogglePeriodStart: () -> Unit
-) {
-    val info = CycleCalculator.classifyDate(selectedDate, periodStarts, model)
-    val isLoggedStart = periodStarts.contains(selectedDate)
-    val dateFmt = DateTimeFormatter.ofPattern("EEE, MMM d, yyyy")
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = selectedDate.format(dateFmt),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(Modifier.height(4.dp))
-                val statusLabel = when {
-                    !model.hasData -> "Tap 'Period Started' to begin tracking"
-                    info.periodStatus == PeriodStatus.LOGGED_START -> "Period Start • Cycle Day ${info.cycleDay}"
-                    info.periodStatus == PeriodStatus.LOGGED -> "Period • Cycle Day ${info.cycleDay}"
-                    info.periodStatus == PeriodStatus.PREDICTED_START ||
-                        info.periodStatus == PeriodStatus.PREDICTED -> "Likely Next Period • Cycle Day ${info.cycleDay}"
-                    info.fertility == FertilityStatus.FERTILE -> "Fertile • Cycle Day ${info.cycleDay}"
-                    info.fertility == FertilityStatus.COULD_BE_FERTILE -> "Could Be Fertile • Cycle Day ${info.cycleDay}"
-                    else -> "Not Fertile • Cycle Day ${info.cycleDay}"
-                }
-                Text(
-                    text = statusLabel,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Spacer(Modifier.width(12.dp))
-
-            if (isLoggedStart) {
-                OutlinedButton(onClick = onTogglePeriodStart) {
-                    Text("Remove", fontSize = 12.sp)
-                }
-            } else {
-                Button(
-                    onClick = onTogglePeriodStart,
-                    colors = ButtonDefaults.buttonColors(containerColor = RedPeriod, contentColor = Color.White)
-                ) {
-                    Text("Period Started", fontSize = 12.sp)
-                }
-            }
-        }
     }
 }
 

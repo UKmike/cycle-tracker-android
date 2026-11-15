@@ -32,8 +32,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -43,7 +41,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -95,8 +92,7 @@ private val RedPeriod = Color(0xFFDC2626)
 @Composable
 fun CycleApp(viewModel: CycleViewModel = viewModel()) {
     val state by viewModel.uiState.collectAsState()
-    val today = LocalDate.now()
-    val isTodayLogged = state.periodStarts.contains(today)
+    val isSelectedLogged = state.periodStarts.contains(state.selectedDate)
     var showDetailsSheet by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -136,18 +132,18 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
         },
         floatingActionButton = {
             ExtendedFloatingActionButton(
-                onClick = { viewModel.togglePeriodStart(today) },
-                containerColor = if (isTodayLogged) GreenFertile else RedPeriod,
+                onClick = { viewModel.togglePeriodStart(state.selectedDate) },
+                containerColor = if (isSelectedLogged) GreenFertile else RedPeriod,
                 contentColor = Color.White,
                 icon = {
                     Icon(
-                        imageVector = if (isTodayLogged) Icons.Default.Check else Icons.Default.Add,
+                        imageVector = if (isSelectedLogged) Icons.Default.Check else Icons.Default.Add,
                         contentDescription = null
                     )
                 },
                 text = {
                     Text(
-                        text = if (isTodayLogged) "Logged Today" else "Period Today",
+                        text = if (isSelectedLogged) "Remove Period" else "Log Period",
                         fontWeight = FontWeight.SemiBold
                     )
                 }
@@ -176,8 +172,7 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
                 periodStarts = state.periodStarts,
                 model = state.model,
                 onToday = viewModel::goToToday,
-                onSelectDate = viewModel::selectDate,
-                onTogglePeriodStart = { viewModel.togglePeriodStart(state.selectedDate) }
+                onSelectDate = viewModel::selectDate
             )
         }
 
@@ -482,8 +477,7 @@ private fun CalendarCard(
     periodStarts: List<LocalDate>,
     model: CycleModel,
     onToday: () -> Unit,
-    onSelectDate: (LocalDate) -> Unit,
-    onTogglePeriodStart: () -> Unit
+    onSelectDate: (LocalDate) -> Unit
 ) {
     val today = LocalDate.now()
     val currentMonth = remember { YearMonth.from(today) }
@@ -497,7 +491,6 @@ private fun CalendarCard(
     val monthFormatter = remember { DateTimeFormatter.ofPattern("MMMM yyyy") }
 
     val selectedInfo = CycleCalculator.classifyDate(selectedDate, periodStarts, model)
-    val isLoggedStart = periodStarts.contains(selectedDate)
     val selectedDateFmt = remember { DateTimeFormatter.ofPattern("EEE, MMM d") }
 
     Card(
@@ -592,49 +585,28 @@ private fun CalendarCard(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
             Spacer(Modifier.height(8.dp))
 
-            // Merged Selected Day Action Bar
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = selectedDate.format(selectedDateFmt),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    val statusLabel = when {
-                        !model.hasData -> "Tap 'Period Started' to begin"
-                        selectedInfo.periodStatus == PeriodStatus.LOGGED_START -> "Period Start • Day ${selectedInfo.cycleDay}"
-                        selectedInfo.periodStatus == PeriodStatus.LOGGED -> "Period • Day ${selectedInfo.cycleDay}"
-                        selectedInfo.periodStatus == PeriodStatus.PREDICTED_START ||
-                            selectedInfo.periodStatus == PeriodStatus.PREDICTED -> "Likely Period • Day ${selectedInfo.cycleDay}"
-                        selectedInfo.fertility == FertilityStatus.FERTILE -> "Fertile • Day ${selectedInfo.cycleDay}"
-                        selectedInfo.fertility == FertilityStatus.COULD_BE_FERTILE -> "Could Be Fertile • Day ${selectedInfo.cycleDay}"
-                        else -> "Not Fertile • Day ${selectedInfo.cycleDay}"
-                    }
-                    Text(
-                        text = statusLabel,
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+            // Merged Selected Day Status Bar
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = selectedDate.format(selectedDateFmt),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                val statusLabel = when {
+                    !model.hasData -> "Tap 'Log Period' to begin"
+                    selectedInfo.periodStatus == PeriodStatus.LOGGED_START -> "Period Start • Day ${selectedInfo.cycleDay}"
+                    selectedInfo.periodStatus == PeriodStatus.LOGGED -> "Period • Day ${selectedInfo.cycleDay}"
+                    selectedInfo.periodStatus == PeriodStatus.PREDICTED_START ||
+                        selectedInfo.periodStatus == PeriodStatus.PREDICTED -> "Likely Period • Day ${selectedInfo.cycleDay}"
+                    selectedInfo.fertility == FertilityStatus.FERTILE -> "Fertile • Day ${selectedInfo.cycleDay}"
+                    selectedInfo.fertility == FertilityStatus.COULD_BE_FERTILE -> "Could Be Fertile • Day ${selectedInfo.cycleDay}"
+                    else -> "Not Fertile • Day ${selectedInfo.cycleDay}"
                 }
-
-                Spacer(Modifier.width(8.dp))
-
-                if (isLoggedStart) {
-                    OutlinedButton(onClick = onTogglePeriodStart) {
-                        Text("Remove", fontSize = 12.sp)
-                    }
-                } else {
-                    Button(
-                        onClick = onTogglePeriodStart,
-                        colors = ButtonDefaults.buttonColors(containerColor = RedPeriod, contentColor = Color.White)
-                    ) {
-                        Text("Period Started", fontSize = 12.sp)
-                    }
-                }
+                Text(
+                    text = statusLabel,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

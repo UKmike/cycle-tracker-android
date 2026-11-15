@@ -182,9 +182,18 @@ object CycleCalculator {
         val fertileStart = ovulationDay - 2
         val fertileEnd = ovulationDay + 1
 
-        val extraBuffer = min(3, model.variabilityDays)
-        val couldStart = max(periodLength + 1, ovulationDay - 5 - extraBuffer)
-        val couldEnd = min(cycleLengthForAnchor - 1, fertileEnd + 3 + extraBuffer)
+        val rawCouldStart = if (model.cyclesUsed > 0 && !date.isBefore(lastStart)) {
+            min(ovulationDay - 5, model.minCycleLength - 18)
+        } else {
+            ovulationDay - 5
+        }
+        val rawCouldEnd = if (model.cyclesUsed > 0 && !date.isBefore(lastStart)) {
+            max(fertileEnd + 3, model.maxCycleLength - 11)
+        } else {
+            fertileEnd + 3
+        }
+        val couldStart = max(periodLength + 1, rawCouldStart)
+        val couldEnd = min(cycleLengthForAnchor - 1, rawCouldEnd)
 
         val fertility = when {
             cycleDay in fertileStart..fertileEnd -> FertilityStatus.FERTILE

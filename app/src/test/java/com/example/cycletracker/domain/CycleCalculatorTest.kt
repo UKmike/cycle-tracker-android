@@ -54,4 +54,31 @@ class CycleCalculatorTest {
         val day29 = CycleCalculator.classifyDate(start.plusDays(28), starts, model)
         assertEquals(PeriodStatus.PREDICTED_START, day29.periodStatus)
     }
+
+    @Test
+    fun irregularCyclesUseFullOginoKnausBounds() {
+        // 24-day cycle followed by 38-day cycle -> min=24, max=38, weighted avg=33
+        val starts = listOf(
+            LocalDate.of(2026, 9, 1),
+            LocalDate.of(2026, 9, 25), // 24 days
+            LocalDate.of(2026, 11, 2)  // 38 days
+        )
+        val model = CycleCalculator.computeModel(starts)
+        assertEquals(24, model.minCycleLength)
+        assertEquals(38, model.maxCycleLength)
+        assertEquals(33, model.averageCycleLength)
+
+        val anchor = starts.last()
+        // Ogino-Knaus start: 24 - 18 = Day 6
+        val day5 = CycleCalculator.classifyDate(anchor.plusDays(4), starts, model)
+        val day6 = CycleCalculator.classifyDate(anchor.plusDays(5), starts, model)
+        assertEquals(FertilityStatus.NOT_FERTILE, day5.fertility)
+        assertEquals(FertilityStatus.COULD_BE_FERTILE, day6.fertility)
+
+        // Ogino-Knaus end: 38 - 11 = Day 27
+        val day27 = CycleCalculator.classifyDate(anchor.plusDays(26), starts, model)
+        val day28 = CycleCalculator.classifyDate(anchor.plusDays(27), starts, model)
+        assertEquals(FertilityStatus.COULD_BE_FERTILE, day27.fertility)
+        assertEquals(FertilityStatus.NOT_FERTILE, day28.fertility)
+    }
 }

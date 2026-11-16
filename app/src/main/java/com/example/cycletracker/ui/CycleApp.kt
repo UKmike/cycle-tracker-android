@@ -170,13 +170,13 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
                 )
             }
 
-            // 2x2 Calendar Key aligned at bottom-left, proportional across space left of FAB
+            // 2x2 Calendar Key aligned at bottom-left within the FAB's vertical space
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
-                    .padding(start = 20.dp, end = 180.dp, bottom = 22.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(start = 28.dp, end = 168.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),

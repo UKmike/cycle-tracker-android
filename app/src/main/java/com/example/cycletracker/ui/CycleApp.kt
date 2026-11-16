@@ -152,30 +152,52 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
             )
         }
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 84.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // 1. Live Home Screen Widget Preview
-            HomeWidgetPreviewCard(
-                todayInfo = state.todayClassification,
-                hasData = state.model.hasData,
-                periodStarts = state.periodStarts,
-                model = state.model
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 80.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // 1. Live Home Screen Widget Preview
+                HomeWidgetPreviewCard(
+                    todayInfo = state.todayClassification,
+                    hasData = state.model.hasData,
+                    periodStarts = state.periodStarts,
+                    model = state.model
+                )
 
-            // 2. Merged Interactive Calendar + Selected Day Section (fills remaining height)
-            CalendarCard(
-                modifier = Modifier.weight(1f),
-                selectedDate = state.selectedDate,
-                periodStarts = state.periodStarts,
-                model = state.model,
-                onToday = viewModel::goToToday,
-                onSelectDate = viewModel::selectDate
-            )
+                // 2. Merged Interactive Calendar + Selected Day Section (fills remaining height)
+                CalendarCard(
+                    modifier = Modifier.weight(1f),
+                    selectedDate = state.selectedDate,
+                    periodStarts = state.periodStarts,
+                    model = state.model,
+                    onToday = viewModel::goToToday,
+                    onSelectDate = viewModel::selectDate
+                )
+            }
+
+            // 2x2 Calendar Key aligned at bottom-left inline with the FAB
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = 16.dp, bottom = 22.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LegendItem(GreenFertile, "Fertile", Modifier.width(80.dp))
+                    LegendItem(YellowCouldBe, "Could be")
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    LegendItem(BlueNotFertile, "Not fertile", Modifier.width(80.dp))
+                    LegendItem(RedPeriod, "Period")
+                }
+            }
         }
 
         if (showDetailsSheet) {
@@ -613,18 +635,6 @@ private fun CalendarCard(
             }
 
             Spacer(Modifier.height(8.dp))
-
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                LegendItem(GreenFertile, "Fertile")
-                LegendItem(YellowCouldBe, "Could be")
-                LegendItem(BlueNotFertile, "Not fertile")
-                LegendItem(RedPeriod, "Period")
-            }
-
-            Spacer(Modifier.height(8.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
             Spacer(Modifier.height(8.dp))
 
@@ -812,8 +822,8 @@ private fun MonthSection(
 }
 
 @Composable
-private fun LegendItem(color: Color, label: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+private fun LegendItem(color: Color, label: String, modifier: Modifier = Modifier) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         Box(
             modifier = Modifier
                 .size(8.dp)

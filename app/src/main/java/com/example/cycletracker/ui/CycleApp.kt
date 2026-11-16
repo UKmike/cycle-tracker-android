@@ -42,10 +42,16 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import android.app.WallpaperManager
+import android.content.Context
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,10 +70,15 @@ import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.cycletracker.domain.CycleCalculator
 import com.example.cycletracker.domain.CycleModel
@@ -638,6 +649,8 @@ private fun CalendarCard(
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
+                val todayButtonBg = rememberWallpaperAccentColor(MaterialTheme.colorScheme.primary)
+                val todayButtonFg = if (todayButtonBg.luminance() > 0.5f) Color(0xFF111827) else Color.White
                 Surface(
                     onClick = {
                         onToday()
@@ -646,7 +659,7 @@ private fun CalendarCard(
                         }
                     },
                     shape = RoundedCornerShape(50),
-                    color = MaterialTheme.colorScheme.primary
+                    color = todayButtonBg
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 11.dp, vertical = 5.dp),
@@ -656,14 +669,14 @@ private fun CalendarCard(
                         Icon(
                             imageVector = Icons.Default.Today,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimary,
+                            tint = todayButtonFg,
                             modifier = Modifier.size(14.dp)
                         )
                         Text(
                             text = "Today",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onPrimary
+                            color = todayButtonFg
                         )
                     }
                 }
@@ -717,11 +730,15 @@ private fun CalendarCard(
             Spacer(Modifier.height(8.dp))
 
             // Merged Selected Day Status Bar
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
                 Text(
                     text = selectedDate.format(selectedDateFmt),
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center
                 )
                 val statusLabel = when {
                     !model.hasData -> "Tap 'Log Period' to begin"
@@ -736,11 +753,72 @@ private fun CalendarCard(
                 Text(
                     text = statusLabel,
                     fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
                 )
             }
         }
     }
+}
+
+@Composable
+private fun rememberWallpaperAccentColor(fallback: Color): Color {
+    val context = LocalContext.current
+    var accentColor by remember(context) {
+        mutableStateOf(readWallpaperPrimaryColor(context) ?: fallback)
+    }
+
+    DisposableEffect(context, fallback) {
+        val updateColor = {
+            accentColor = readWallpaperPrimaryColor(context) ?: fallback
+        }
+        updateColor()
+
+        val lifecycleOwner = context as? LifecycleOwner
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                updateColor()
+            }
+        }
+        lifecycleOwner?.lifecycle?.addObserver(observer)
+
+        val wm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            WallpaperManager.getInstance(context)
+        } else null
+        val listener = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            WallpaperManager.OnColorsChangedListener { _, which ->
+                if ((which and WallpaperManager.FLAG_SYSTEM) != 0) {
+                    updateColor()
+                }
+            }
+        } else null
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1 && wm != null && listener != null) {
+            wm.addOnColorsChangedListener(listener, Handler(Looper.getMainLooper()))
+        }
+
+        onDispose {
+            lifecycleOwner?.lifecycle?.removeObserver(observer)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1 && wm != null && listener != null) {
+                wm.removeOnColorsChangedListener(listener)
+            }
+        }
+    }
+
+    return accentColor
+}
+
+private fun readWallpaperPrimaryColor(context: Context): Color? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O_MR1) return null
+    val colors = WallpaperManager.getInstance(context)
+        .getWallpaperColors(WallpaperManager.FLAG_SYSTEM) ?: return null
+    val candidates = listOfNotNull(colors.primaryColor, colors.secondaryColor, colors.tertiaryColor)
+    val hsv = FloatArray(3)
+    val vivid = candidates.firstOrNull { c ->
+        android.graphics.Color.colorToHSV(c.toArgb(), hsv)
+        hsv[1] >= 0.20f && hsv[2] >= 0.15f
+    } ?: colors.primaryColor
+    return Color(vivid.toArgb())
 }
 
 @Composable

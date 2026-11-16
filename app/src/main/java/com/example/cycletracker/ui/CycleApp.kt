@@ -2,15 +2,12 @@ package com.example.cycletracker.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -67,13 +64,11 @@ import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.cycletracker.R
 import com.example.cycletracker.domain.CycleCalculator
 import com.example.cycletracker.domain.CycleModel
 import com.example.cycletracker.domain.DayClassification
@@ -102,14 +97,7 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
             TopAppBar(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Image(
-                            painter = painterResource(id = R.drawable.ic_launcher_foreground),
-                            contentDescription = "Maya logo",
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(Color(0xFFFFF8F6))
-                        )
+                        MayaLogo(modifier = Modifier.size(32.dp))
                         Spacer(Modifier.width(8.dp))
                         Text(
                             text = "Maya",
@@ -221,6 +209,91 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun MayaLogo(modifier: Modifier = Modifier) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val strokeWidth = w * 0.105f
+        val ringRadius = (size.minDimension - strokeWidth) / 2f
+
+        // Warm off-white inner fill
+        drawCircle(
+            color = Color(0xFFFFF8F6),
+            radius = ringRadius,
+            center = center
+        )
+
+        // Thin 4-color ring with smooth fades between adjacent quadrants
+        drawCircle(
+            brush = Brush.sweepGradient(
+                0.00f to Color(0xFF8A7390), // Red -> Blue blend (right)
+                0.125f to BlueNotFertile,   // Bottom-right
+                0.25f to Color(0xFF9AC08E), // Blue -> Yellow blend (bottom)
+                0.375f to YellowCouldBe,    // Bottom-left
+                0.50f to Color(0xFF80AB47), // Yellow -> Green blend (left)
+                0.625f to GreenFertile,     // Top-left
+                0.75f to Color(0xFF705E47), // Green -> Red blend (top)
+                0.875f to RedPeriod,        // Top-right
+                1.00f to Color(0xFF8A7390), // Red -> Blue blend (right)
+                center = center
+            ),
+            radius = ringRadius,
+            center = center,
+            style = Stroke(width = strokeWidth)
+        )
+
+        // Center heart motif
+        val heart = Path().apply {
+            moveTo(w * 0.50f, h * 0.42f)
+            cubicTo(
+                w * 0.50f, h * 0.34f,
+                w * 0.30f, h * 0.32f,
+                w * 0.30f, h * 0.48f
+            )
+            cubicTo(
+                w * 0.30f, h * 0.61f,
+                w * 0.50f, h * 0.72f,
+                w * 0.50f, h * 0.75f
+            )
+            cubicTo(
+                w * 0.50f, h * 0.72f,
+                w * 0.70f, h * 0.61f,
+                w * 0.70f, h * 0.48f
+            )
+            cubicTo(
+                w * 0.70f, h * 0.32f,
+                w * 0.50f, h * 0.34f,
+                w * 0.50f, h * 0.42f
+            )
+            close()
+        }
+        drawPath(path = heart, color = RedPeriod)
+
+        // Subtle highlight on left lobe
+        val highlight = Path().apply {
+            moveTo(w * 0.365f, h * 0.435f)
+            cubicTo(
+                w * 0.38f, h * 0.398f,
+                w * 0.42f, h * 0.392f,
+                w * 0.445f, h * 0.412f
+            )
+            cubicTo(
+                w * 0.418f, h * 0.42f,
+                w * 0.392f, h * 0.444f,
+                w * 0.38f, h * 0.48f
+            )
+            cubicTo(
+                w * 0.37f, h * 0.468f,
+                w * 0.36f, h * 0.452f,
+                w * 0.365f, h * 0.435f
+            )
+            close()
+        }
+        drawPath(path = highlight, color = Color(0xFFFCA5A5))
     }
 }
 
@@ -515,7 +588,6 @@ private fun HomeWidgetPreviewCard(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CalendarCard(
     modifier: Modifier = Modifier,

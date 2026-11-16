@@ -113,47 +113,51 @@ class CycleWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
 
+            val blackGradStart = Color.parseColor("#262626")
+            val blackGradMid = Color.parseColor("#141414")
+            val blackGradEnd = Color.parseColor("#050505")
+
             val style = when {
                 info.periodStatus == PeriodStatus.LOGGED_START ||
                     info.periodStatus == PeriodStatus.LOGGED -> WidgetStyle(
+                    blackGradStart,
+                    blackGradMid,
+                    blackGradEnd,
                     Color.parseColor("#EF4444"),
-                    COLOR_RED_PERIOD,
-                    Color.parseColor("#B91C1C"),
-                    Color.WHITE,
-                    Color.parseColor("#FEE2E2"),
+                    Color.parseColor("#FCA5A5"),
                     "Period"
                 )
                 info.periodStatus == PeriodStatus.PREDICTED_START ||
                     info.periodStatus == PeriodStatus.PREDICTED -> WidgetStyle(
+                    blackGradStart,
+                    blackGradMid,
+                    blackGradEnd,
                     Color.parseColor("#FCA5A5"),
                     Color.parseColor("#F87171"),
-                    Color.parseColor("#EF4444"),
-                    Color.parseColor("#7F1D1D"),
-                    Color.parseColor("#991B1B"),
                     "Likely Period"
                 )
                 info.fertility == FertilityStatus.FERTILE -> WidgetStyle(
+                    blackGradStart,
+                    blackGradMid,
+                    blackGradEnd,
                     Color.parseColor("#10B981"),
-                    COLOR_GREEN,
-                    Color.parseColor("#047857"),
-                    Color.WHITE,
-                    Color.parseColor("#D1FAE5"),
+                    Color.parseColor("#6EE7B7"),
                     "Fertile"
                 )
                 info.fertility == FertilityStatus.COULD_BE_FERTILE -> WidgetStyle(
-                    Color.parseColor("#FDE047"),
+                    blackGradStart,
+                    blackGradMid,
+                    blackGradEnd,
                     COLOR_YELLOW,
-                    Color.parseColor("#F59E0B"),
-                    Color.parseColor("#451A03"),
-                    Color.parseColor("#78350F"),
+                    Color.parseColor("#FDE68A"),
                     "Could Be Fertile"
                 )
                 else -> WidgetStyle(
-                    Color.parseColor("#7DD3FC"),
+                    blackGradStart,
+                    blackGradMid,
+                    blackGradEnd,
                     COLOR_LIGHT_BLUE,
-                    Color.parseColor("#0EA5E9"),
-                    Color.parseColor("#082F49"),
-                    Color.parseColor("#0369A1"),
+                    Color.parseColor("#7DD3FC"),
                     "Not Fertile"
                 )
             }
@@ -183,21 +187,23 @@ class CycleWidgetProvider : AppWidgetProvider() {
             views.setTextColor(R.id.widget_status_badge, style.textColor)
             views.setTextColor(R.id.widget_days_number, style.textColor)
             views.setTextColor(R.id.widget_days_unit, style.textColor)
+            views.setTextColor(R.id.widget_compact_unit, style.textColor)
             views.setTextColor(R.id.widget_subtitle, style.textColor)
             views.setTextColor(R.id.widget_footer, style.footerColor)
 
             // Adapt layout density for 1x1 vs larger sizes
             if (isCompact1x1) {
                 val padPx = TypedValue.applyDimension(
-                    TypedValue.COMPLEX_UNIT_DIP, 10f, context.resources.displayMetrics
+                    TypedValue.COMPLEX_UNIT_DIP, 8f, context.resources.displayMetrics
                 ).toInt()
                 views.setViewPadding(R.id.widget_content, padPx, padPx, padPx, padPx)
                 views.setViewVisibility(R.id.widget_status_badge, View.GONE)
-                views.setViewVisibility(R.id.widget_days_unit, View.VISIBLE)
+                views.setViewVisibility(R.id.widget_days_unit, View.GONE)
+                views.setViewVisibility(R.id.widget_compact_unit, View.VISIBLE)
+                views.setViewVisibility(R.id.widget_subtitle, View.GONE)
                 views.setViewVisibility(R.id.widget_footer, View.GONE)
-                views.setTextViewTextSize(R.id.widget_days_number, TypedValue.COMPLEX_UNIT_SP, 15f)
-                views.setTextViewTextSize(R.id.widget_days_unit, TypedValue.COMPLEX_UNIT_SP, 10f)
-                views.setTextViewTextSize(R.id.widget_subtitle, TypedValue.COMPLEX_UNIT_SP, 8.5f)
+                views.setTextViewTextSize(R.id.widget_days_number, TypedValue.COMPLEX_UNIT_SP, 22f)
+                views.setTextViewTextSize(R.id.widget_compact_unit, TypedValue.COMPLEX_UNIT_SP, 12f)
             } else {
                 val padPx = TypedValue.applyDimension(
                     TypedValue.COMPLEX_UNIT_DIP, 20f, context.resources.displayMetrics
@@ -205,6 +211,8 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 views.setViewPadding(R.id.widget_content, padPx, padPx, padPx, padPx)
                 views.setViewVisibility(R.id.widget_status_badge, View.VISIBLE)
                 views.setViewVisibility(R.id.widget_days_unit, View.VISIBLE)
+                views.setViewVisibility(R.id.widget_compact_unit, View.GONE)
+                views.setViewVisibility(R.id.widget_subtitle, View.VISIBLE)
                 views.setViewVisibility(R.id.widget_footer, View.VISIBLE)
                 views.setTextViewTextSize(R.id.widget_days_number, TypedValue.COMPLEX_UNIT_SP, 34f)
                 views.setTextViewTextSize(R.id.widget_days_unit, TypedValue.COMPLEX_UNIT_SP, 13f)
@@ -214,23 +222,19 @@ class CycleWidgetProvider : AppWidgetProvider() {
             if (!model.hasData || info.daysToNextPeriod == null || info.nextPeriodDate == null) {
                 views.setTextViewText(R.id.widget_days_number, "--")
                 views.setTextViewText(R.id.widget_days_unit, "days")
-                views.setTextViewText(
-                    R.id.widget_subtitle,
-                    if (isCompact1x1) "to next\nperiod" else "to next period"
-                )
+                views.setTextViewText(R.id.widget_compact_unit, "Days")
+                views.setTextViewText(R.id.widget_subtitle, "to next period")
                 views.setTextViewText(R.id.widget_footer, "Tap to log period")
             } else {
                 val days = info.daysToNextPeriod
                 val unit = if (days == 1) "day" else "days"
+                val compactUnit = if (days == 1) "Day" else "Days"
                 views.setTextViewText(R.id.widget_days_number, days.toString())
                 views.setTextViewText(R.id.widget_days_unit, unit)
+                views.setTextViewText(R.id.widget_compact_unit, compactUnit)
                 views.setTextViewText(
                     R.id.widget_subtitle,
-                    when {
-                        isCompact1x1 -> if (days == 0) "expected\ntoday" else "to next\nperiod"
-                        days == 0 -> "period expected today"
-                        else -> "to next period"
-                    }
+                    if (days == 0) "period expected today" else "to next period"
                 )
                 views.setTextViewText(
                     R.id.widget_footer,
@@ -301,7 +305,7 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 shader = LinearGradient(
                     cardRect.left, cardRect.top,
                     cardRect.left, cardRect.top + cardRect.height() * 0.65f,
-                    intArrayOf(Color.argb(72, 255, 255, 255), Color.TRANSPARENT),
+                    intArrayOf(Color.argb(28, 255, 255, 255), Color.TRANSPARENT),
                     null,
                     Shader.TileMode.CLAMP
                 )
@@ -315,7 +319,7 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 shader = LinearGradient(
                     cardRect.left, cardRect.top,
                     cardRect.right, cardRect.bottom,
-                    intArrayOf(Color.argb(120, 255, 255, 255), Color.argb(30, 255, 255, 255)),
+                    intArrayOf(Color.argb(64, 255, 255, 255), Color.argb(16, 255, 255, 255)),
                     null,
                     Shader.TileMode.CLAMP
                 )

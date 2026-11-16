@@ -57,10 +57,22 @@
                 android:layout_marginBottom="3dp"
                 android:maxLines="1"
                 android:text="days"
-                android:textColor="#082F49"
+                android:textColor="#38BDF8"
                 android:textSize="13sp"
                 android:textStyle="bold" />
         </LinearLayout>
+
+        <TextView
+            android:id="@+id/widget_compact_unit"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            android:maxLines="1"
+            android:text="Days"
+            android:textColor="#38BDF8"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:includeFontPadding="false" />
 
         <TextView
             android:id="@+id/widget_subtitle"
@@ -72,7 +84,7 @@
             android:ellipsize="end"
             android:lineSpacingMultiplier="0.9"
             android:text="to next period"
-            android:textColor="#082F49"
+            android:textColor="#38BDF8"
             android:textSize="12sp" />
 
         <TextView

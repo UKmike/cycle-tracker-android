@@ -447,7 +447,7 @@ class CycleWidgetProvider : AppWidgetProvider() {
                     tickPaint
                 )
 
-                // Highlight current cycle day on the outline (same 3-layer marker as app)
+                // Highlight current cycle day on the outline (translucent halo + deep solid dot)
                 val currentDay = todayInfo.cycleDay
                 if (currentDay != null) {
                     val clampedIndex = ((currentDay - 1) % count + count) % count
@@ -455,19 +455,23 @@ class CycleWidgetProvider : AppWidgetProvider() {
                     val pos = FloatArray(2)
                     pm.getPosTan(midDist, pos, null)
 
+                    val (haloColor, dotColor) = when (cycleColors[clampedIndex]) {
+                        COLOR_RED_PERIOD -> Color.argb(102, 248, 113, 113) to Color.parseColor("#B91C1C")
+                        COLOR_GREEN -> Color.argb(97, 52, 211, 153) to Color.parseColor("#047857")
+                        COLOR_YELLOW -> Color.argb(107, 253, 224, 71) to Color.parseColor("#D97706")
+                        else -> Color.argb(102, 125, 211, 252) to Color.parseColor("#0284C7")
+                    }
+
                     val markerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         style = Paint.Style.FILL
                     }
-                    val outerR = (if (isCompact) 5.2f else 8.5f) * dp
-                    val midR = (if (isCompact) 3.7f else 6f) * dp
-                    val innerR = (if (isCompact) 2.1f else 3.5f) * dp
+                    val haloR = (if (isCompact) 5.5f else 9.5f) * dp
+                    val dotR = (if (isCompact) 3.5f else 6f) * dp
 
-                    markerPaint.color = Color.WHITE
-                    canvas.drawCircle(pos[0], pos[1], outerR, markerPaint)
-                    markerPaint.color = Color.parseColor("#111827")
-                    canvas.drawCircle(pos[0], pos[1], midR, markerPaint)
-                    markerPaint.color = cycleColors[clampedIndex]
-                    canvas.drawCircle(pos[0], pos[1], innerR, markerPaint)
+                    markerPaint.color = haloColor
+                    canvas.drawCircle(pos[0], pos[1], haloR, markerPaint)
+                    markerPaint.color = dotColor
+                    canvas.drawCircle(pos[0], pos[1], dotR, markerPaint)
                 }
             }
 

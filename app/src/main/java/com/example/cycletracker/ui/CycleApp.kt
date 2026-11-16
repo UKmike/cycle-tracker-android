@@ -579,25 +579,26 @@ private fun HomeWidgetPreviewCard(
                     cap = StrokeCap.Round
                 )
 
-                // Highlight current cycle day on the outline
+                // Highlight current cycle day on the outline (translucent halo + deep solid dot)
                 val currentDay = todayInfo.cycleDay
                 if (currentDay != null) {
                     val clampedIndex = ((currentDay - 1) % count + count) % count
                     val midDist = totalLength * (clampedIndex + 0.5f) / count
                     val markerPos = pathMeasure.getPosition(midDist)
+                    val (haloColor, dotColor) = when (cycleColors[clampedIndex]) {
+                        RedPeriod -> Color(0x66F87171) to Color(0xFFB91C1C)
+                        GreenFertile -> Color(0x6134D399) to Color(0xFF047857)
+                        YellowCouldBe -> Color(0x6BFDE047) to Color(0xFFD97706)
+                        else -> Color(0x667DD3FC) to Color(0xFF0284C7)
+                    }
                     drawCircle(
-                        color = Color.White,
-                        radius = 8.5.dp.toPx(),
+                        color = haloColor,
+                        radius = 9.5.dp.toPx(),
                         center = markerPos
                     )
                     drawCircle(
-                        color = Color(0xFF111827),
+                        color = dotColor,
                         radius = 6.dp.toPx(),
-                        center = markerPos
-                    )
-                    drawCircle(
-                        color = cycleColors[clampedIndex],
-                        radius = 3.5.dp.toPx(),
                         center = markerPos
                     )
                 }

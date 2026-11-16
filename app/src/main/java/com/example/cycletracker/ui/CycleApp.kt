@@ -586,10 +586,10 @@ private fun HomeWidgetPreviewCard(
                     val midDist = totalLength * (clampedIndex + 0.5f) / count
                     val markerPos = pathMeasure.getPosition(midDist)
                     val (haloColor, dotColor) = when (cycleColors[clampedIndex]) {
-                        RedPeriod -> Color(0x66F87171) to Color(0xFFB91C1C)
-                        GreenFertile -> Color(0x6134D399) to Color(0xFF047857)
-                        YellowCouldBe -> Color(0x6BFDE047) to Color(0xFFD97706)
-                        else -> Color(0x667DD3FC) to Color(0xFF0284C7)
+                        RedPeriod -> Color(0xFFFCA5A5) to Color(0xFFB91C1C)
+                        GreenFertile -> Color(0xFF6EE7B7) to Color(0xFF047857)
+                        YellowCouldBe -> Color(0xFFFEF08A) to Color(0xFFD97706)
+                        else -> Color(0xFFBAE6FD) to Color(0xFF0284C7)
                     }
                     drawCircle(
                         color = haloColor,

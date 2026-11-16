@@ -456,10 +456,10 @@ class CycleWidgetProvider : AppWidgetProvider() {
                     pm.getPosTan(midDist, pos, null)
 
                     val (haloColor, dotColor) = when (cycleColors[clampedIndex]) {
-                        COLOR_RED_PERIOD -> Color.argb(102, 248, 113, 113) to Color.parseColor("#B91C1C")
-                        COLOR_GREEN -> Color.argb(97, 52, 211, 153) to Color.parseColor("#047857")
-                        COLOR_YELLOW -> Color.argb(107, 253, 224, 71) to Color.parseColor("#D97706")
-                        else -> Color.argb(102, 125, 211, 252) to Color.parseColor("#0284C7")
+                        COLOR_RED_PERIOD -> Color.parseColor("#FCA5A5") to Color.parseColor("#B91C1C")
+                        COLOR_GREEN -> Color.parseColor("#6EE7B7") to Color.parseColor("#047857")
+                        COLOR_YELLOW -> Color.parseColor("#FEF08A") to Color.parseColor("#D97706")
+                        else -> Color.parseColor("#BAE6FD") to Color.parseColor("#0284C7")
                     }
 
                     val markerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {

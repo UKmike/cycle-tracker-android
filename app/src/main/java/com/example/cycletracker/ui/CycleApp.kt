@@ -292,27 +292,16 @@ private fun HomeWidgetPreviewCard(
                 )
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Surface(
+                    color = contentColor.copy(alpha = 0.18f),
+                    shape = RoundedCornerShape(50)
                 ) {
-                    Surface(
-                        color = contentColor.copy(alpha = 0.18f),
-                        shape = RoundedCornerShape(50)
-                    ) {
-                        Text(
-                            text = statusText,
-                            color = contentColor,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
-                        )
-                    }
                     Text(
-                        text = "Home Widget",
-                        color = contentColor.copy(alpha = 0.75f),
-                        fontSize = 11.sp
+                        text = statusText,
+                        color = contentColor,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
                     )
                 }
 

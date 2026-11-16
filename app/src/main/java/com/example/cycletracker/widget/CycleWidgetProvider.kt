@@ -272,17 +272,19 @@ class CycleWidgetProvider : AppWidgetProvider() {
 
             val strokeWidth = (if (isCompact) 4.2f else 6f) * dp
             val markerOverflow = (if (isCompact) 3.5f else 5.5f) * dp
-            val ringInset = markerOverflow + strokeWidth / 2f
-            val cardGap = (if (isCompact) 1.5f else 2.5f) * dp
-            val cardInset = ringInset + strokeWidth / 2f + cardGap
-
-            val outerCorner = min(
-                (if (isCompact) 18f else 28f) * dp,
-                (min(w, h) - ringInset * 2f) / 2f
+            val cardInset = 1.5f * dp
+            val ringInset = max(
+                markerOverflow + strokeWidth / 2f,
+                cardInset + strokeWidth / 2f + (if (isCompact) 1.5f else 2.5f) * dp
             )
-            val innerCorner = max(
+
+            val cardCorner = min(
+                (if (isCompact) 18f else 28f) * dp,
+                (min(w, h) - cardInset * 2f) / 2f
+            )
+            val ringCorner = max(
                 4f * dp,
-                outerCorner - (cardInset - ringInset)
+                cardCorner - (ringInset - cardInset)
             )
 
             // 1. Draw diagonal gradient rounded card fill + frosted glass sheen + specular border
@@ -297,7 +299,7 @@ class CycleWidgetProvider : AppWidgetProvider() {
                     Shader.TileMode.CLAMP
                 )
             }
-            canvas.drawRoundRect(cardRect, innerCorner, innerCorner, fillPaint)
+            canvas.drawRoundRect(cardRect, cardCorner, cardCorner, fillPaint)
 
             // Frosted top-left glass sheen
             val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -310,7 +312,7 @@ class CycleWidgetProvider : AppWidgetProvider() {
                     Shader.TileMode.CLAMP
                 )
             }
-            canvas.drawRoundRect(cardRect, innerCorner, innerCorner, sheenPaint)
+            canvas.drawRoundRect(cardRect, cardCorner, cardCorner, sheenPaint)
 
             // Delicate inner specular glass border
             val glassBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -330,7 +332,7 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 cardRect.right - 0.6f * dp,
                 cardRect.bottom - 0.6f * dp
             )
-            canvas.drawRoundRect(borderRect, innerCorner, innerCorner, glassBorderPaint)
+            canvas.drawRoundRect(borderRect, cardCorner, cardCorner, glassBorderPaint)
 
             // 2. If cycle data exists, draw the cycle-colored perimeter outline starting at top-center
             if (model.hasData && periodStarts.isNotEmpty()) {
@@ -360,24 +362,24 @@ class CycleWidgetProvider : AppWidgetProvider() {
 
                 val perimeter = Path().apply {
                     moveTo(midX, top)
-                    lineTo(right - outerCorner, top)
+                    lineTo(right - ringCorner, top)
                     arcTo(
-                        RectF(right - 2 * outerCorner, top, right, top + 2 * outerCorner),
+                        RectF(right - 2 * ringCorner, top, right, top + 2 * ringCorner),
                         -90f, 90f, false
                     )
-                    lineTo(right, bottom - outerCorner)
+                    lineTo(right, bottom - ringCorner)
                     arcTo(
-                        RectF(right - 2 * outerCorner, bottom - 2 * outerCorner, right, bottom),
+                        RectF(right - 2 * ringCorner, bottom - 2 * ringCorner, right, bottom),
                         0f, 90f, false
                     )
-                    lineTo(left + outerCorner, bottom)
+                    lineTo(left + ringCorner, bottom)
                     arcTo(
-                        RectF(left, bottom - 2 * outerCorner, left + 2 * outerCorner, bottom),
+                        RectF(left, bottom - 2 * ringCorner, left + 2 * ringCorner, bottom),
                         90f, 90f, false
                     )
-                    lineTo(left, top + outerCorner)
+                    lineTo(left, top + ringCorner)
                     arcTo(
-                        RectF(left, top, left + 2 * outerCorner, top + 2 * outerCorner),
+                        RectF(left, top, left + 2 * ringCorner, top + 2 * ringCorner),
                         180f, 90f, false
                     )
                     lineTo(midX, top)

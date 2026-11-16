@@ -625,7 +625,7 @@ private fun CalendarCard(
 ) {
     val today = LocalDate.now()
     val currentMonth = remember { YearMonth.from(today) }
-    val monthsPast = 12
+    val monthsPast = 120
     val monthsFuture = 12
     val months = remember(currentMonth) {
         (-monthsPast..monthsFuture).map { offset -> currentMonth.plusMonths(offset.toLong()) }

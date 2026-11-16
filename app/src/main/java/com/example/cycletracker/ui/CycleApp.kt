@@ -543,7 +543,16 @@ private fun HomeWidgetPreviewCard(
                     )
                 }
 
-                // Highlight current cycle day on the outline (translucent halo + deep solid dot)
+                // Top-center tick marking Cycle Day 1 (period start)
+                drawLine(
+                    color = Color.White,
+                    start = Offset(midX, top - strokeWidth * 0.6f),
+                    end = Offset(midX, top + strokeWidth * 0.6f),
+                    strokeWidth = 2.dp.toPx(),
+                    cap = StrokeCap.Round
+                )
+
+                // Highlight current cycle day on the outline (opaque halo + deep solid dot)
                 val currentDay = todayInfo.cycleDay
                 if (currentDay != null) {
                     val clampedIndex = ((currentDay - 1) % count + count) % count

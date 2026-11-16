@@ -409,6 +409,19 @@ class CycleWidgetProvider : AppWidgetProvider() {
                     canvas.drawPath(segPath, segPaint)
                 }
 
+                // Top-center tick marking Cycle Day 1 (period start)
+                val tickPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    style = Paint.Style.STROKE
+                    this.strokeWidth = (if (isCompact) 1.6f else 2f) * dp
+                    strokeCap = Paint.Cap.ROUND
+                    color = Color.WHITE
+                }
+                canvas.drawLine(
+                    midX, top - strokeWidth * 0.6f,
+                    midX, top + strokeWidth * 0.6f,
+                    tickPaint
+                )
+
                 // Highlight current cycle day on the outline (opaque halo + deep solid dot)
                 val currentDay = todayInfo.cycleDay
                 if (currentDay != null) {

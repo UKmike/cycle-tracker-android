@@ -170,20 +170,27 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
                 )
             }
 
-            // 2x2 Calendar Key aligned at bottom-left inline with the FAB
+            // 2x2 Calendar Key aligned at bottom-left, proportional across space left of FAB
             Column(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(start = 16.dp, bottom = 22.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 180.dp, bottom = 22.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    LegendItem(GreenFertile, "Fertile", Modifier.width(80.dp))
-                    LegendItem(YellowCouldBe, "Could be")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    LegendItem(GreenFertile, "Fertile", Modifier.weight(1f))
+                    LegendItem(YellowCouldBe, "Could be", Modifier.weight(1f))
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    LegendItem(BlueNotFertile, "Not fertile", Modifier.width(80.dp))
-                    LegendItem(RedPeriod, "Period")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    LegendItem(BlueNotFertile, "Not fertile", Modifier.weight(1f))
+                    LegendItem(RedPeriod, "Period", Modifier.weight(1f))
                 }
             }
         }

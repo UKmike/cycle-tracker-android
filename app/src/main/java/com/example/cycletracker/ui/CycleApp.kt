@@ -69,7 +69,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -90,6 +89,11 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.max
+import kotlin.math.min
 
 private val GreenFertile = Color(0xFF059669)
 private val YellowCouldBe = Color(0xFFFBBF24)
@@ -525,59 +529,19 @@ private fun HomeWidgetPreviewCard(
                     style = Stroke(width = strokeWidth + 3.dp.toPx(), cap = StrokeCap.Butt)
                 )
 
-                val fadeFraction = 0.30f
-                val subSteps = 8
-                cycleColors.forEachIndexed { index, color ->
-                    val segStart = totalLength * index / count
-                    val segEnd = totalLength * (index + 1) / count
-                    val prevColor = if (index > 0) cycleColors[index - 1] else color
-                    val nextColor = if (index < count - 1) cycleColors[index + 1] else color
-
-                    if (prevColor == color && nextColor == color) {
-                        segmentPath.reset()
-                        pathMeasure.getSegment(segStart, segEnd, segmentPath, startWithMoveTo = true)
-                        drawPath(
-                            path = segmentPath,
-                            color = color,
-                            style = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
-                        )
-                    } else {
-                        for (s in 0 until subSteps) {
-                            val u0 = s.toFloat() / subSteps
-                            val u1 = (s + 1).toFloat() / subSteps
-                            val uMid = (u0 + u1) * 0.5f
-                            val stepColor = when {
-                                uMid < fadeFraction && prevColor != color -> {
-                                    val midEdge = lerp(prevColor, color, 0.5f)
-                                    lerp(midEdge, color, uMid / fadeFraction)
-                                }
-                                uMid > 1f - fadeFraction && nextColor != color -> {
-                                    val midEdge = lerp(color, nextColor, 0.5f)
-                                    lerp(color, midEdge, (uMid - (1f - fadeFraction)) / fadeFraction)
-                                }
-                                else -> color
-                            }
-                            val d0 = segStart + (segEnd - segStart) * u0
-                            val d1 = (segStart + (segEnd - segStart) * u1 + 0.5f).coerceAtMost(segEnd)
-                            segmentPath.reset()
-                            pathMeasure.getSegment(d0, d1, segmentPath, startWithMoveTo = true)
-                            drawPath(
-                                path = segmentPath,
-                                color = stepColor,
-                                style = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
-                            )
-                        }
-                    }
+                val totalSteps = count * 8
+                for (step in 0 until totalSteps) {
+                    val d0 = totalLength * step / totalSteps
+                    val d1 = (totalLength * (step + 1) / totalSteps + 0.6f).coerceAtMost(totalLength)
+                    val dayPos = count * (step + 0.5f) / totalSteps
+                    segmentPath.reset()
+                    pathMeasure.getSegment(d0, d1, segmentPath, startWithMoveTo = true)
+                    drawPath(
+                        path = segmentPath,
+                        color = sampleSmoothCycleColorCompose(cycleColors, dayPos),
+                        style = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
+                    )
                 }
-
-                // Top-center tick marking Cycle Day 1 (period start)
-                drawLine(
-                    color = Color.White,
-                    start = Offset(midX, top - strokeWidth * 0.6f),
-                    end = Offset(midX, top + strokeWidth * 0.6f),
-                    strokeWidth = 2.dp.toPx(),
-                    cap = StrokeCap.Round
-                )
 
                 // Highlight current cycle day on the outline (translucent halo + deep solid dot)
                 val currentDay = todayInfo.cycleDay
@@ -605,6 +569,40 @@ private fun HomeWidgetPreviewCard(
             }
         }
     }
+}
+
+private fun sampleSmoothCycleColorCompose(
+    colors: List<Color>,
+    dayPos: Float,
+    blendRadius: Float = 1.6f
+): Color {
+    val count = colors.size
+    if (count == 0) return Color.Transparent
+    var wSum = 0f
+    var rSum = 0f
+    var gSum = 0f
+    var bSum = 0f
+    val startIdx = max(0, (dayPos - blendRadius).toInt())
+    val endIdx = min(count - 1, (dayPos + blendRadius).toInt() + 1)
+    for (i in startIdx..endIdx) {
+        val center = i + 0.5f
+        val dist = abs(dayPos - center)
+        if (dist <= blendRadius) {
+            val weight = 0.5f * (1f + cos((PI * dist / blendRadius).toFloat()))
+            val c = colors[i]
+            rSum += c.red * weight
+            gSum += c.green * weight
+            bSum += c.blue * weight
+            wSum += weight
+        }
+    }
+    if (wSum <= 0f) return colors[dayPos.toInt().coerceIn(0, count - 1)]
+    return Color(
+        red = (rSum / wSum).coerceIn(0f, 1f),
+        green = (gSum / wSum).coerceIn(0f, 1f),
+        blue = (bSum / wSum).coerceIn(0f, 1f),
+        alpha = 1f
+    )
 }
 
 @Composable

@@ -29,8 +29,14 @@ import com.example.cycletracker.domain.FertilityStatus
 import com.example.cycletracker.domain.PeriodStatus
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import kotlin.math.PI
+import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
+import kotlin.math.sign
+import kotlin.math.sin
 
 class CycleWidgetProvider : AppWidgetProvider() {
 
@@ -270,25 +276,13 @@ class CycleWidgetProvider : AppWidgetProvider() {
             val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
 
-            val strokeWidth = (if (isCompact) 4.2f else 6f) * dp
-            val markerOverflow = (if (isCompact) 3.5f else 5.5f) * dp
+            val strokeWidth = (if (isCompact) 3.8f else 5.5f) * dp
             val cardInset = 1.5f * dp
-            val ringInset = max(
-                markerOverflow + strokeWidth / 2f,
-                cardInset + strokeWidth / 2f + (if (isCompact) 1.5f else 2.5f) * dp
-            )
+            val ringInset = strokeWidth / 2f + (if (isCompact) 5.5f else 9f) * dp
 
-            val cardCorner = min(
-                (if (isCompact) 18f else 28f) * dp,
-                (min(w, h) - cardInset * 2f) / 2f
-            )
-            val ringCorner = max(
-                4f * dp,
-                cardCorner - (ringInset - cardInset)
-            )
-
-            // 1. Draw diagonal gradient rounded card fill + frosted glass sheen + specular border
+            // 1. Draw diagonal gradient expressive squircle card + frosted sheen + specular border
             val cardRect = RectF(cardInset, cardInset, w - cardInset, h - cardInset)
+            val cardPath = buildSquirclePath(cardRect)
             val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.FILL
                 shader = LinearGradient(
@@ -299,7 +293,7 @@ class CycleWidgetProvider : AppWidgetProvider() {
                     Shader.TileMode.CLAMP
                 )
             }
-            canvas.drawRoundRect(cardRect, cardCorner, cardCorner, fillPaint)
+            canvas.drawPath(cardPath, fillPaint)
 
             // Frosted top-left glass sheen
             val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -307,12 +301,12 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 shader = LinearGradient(
                     cardRect.left, cardRect.top,
                     cardRect.left, cardRect.top + cardRect.height() * 0.65f,
-                    intArrayOf(Color.argb(28, 255, 255, 255), Color.TRANSPARENT),
+                    intArrayOf(Color.argb(24, 255, 255, 255), Color.TRANSPARENT),
                     null,
                     Shader.TileMode.CLAMP
                 )
             }
-            canvas.drawRoundRect(cardRect, cardCorner, cardCorner, sheenPaint)
+            canvas.drawPath(cardPath, sheenPaint)
 
             // Delicate inner specular glass border
             val glassBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -332,9 +326,9 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 cardRect.right - 0.6f * dp,
                 cardRect.bottom - 0.6f * dp
             )
-            canvas.drawRoundRect(borderRect, cardCorner, cardCorner, glassBorderPaint)
+            canvas.drawPath(buildSquirclePath(borderRect), glassBorderPaint)
 
-            // 2. If cycle data exists, draw the cycle-colored perimeter outline starting at top-center
+            // 2. If cycle data exists, draw the circular cycle-colored outline starting at top-center
             if (model.hasData && periodStarts.isNotEmpty()) {
                 val sortedStarts = periodStarts.sorted()
                 val cycleStart = sortedStarts.last()
@@ -354,35 +348,17 @@ class CycleWidgetProvider : AppWidgetProvider() {
                     }
                 }
 
-                val left = ringInset
-                val top = ringInset
-                val right = w - ringInset
-                val bottom = h - ringInset
-                val midX = w / 2f
-
+                val cx = w / 2f
+                val cy = h / 2f
+                val ringRadius = max(20f * dp, min(cardRect.width(), cardRect.height()) / 2f - ringInset)
+                val ringOval = RectF(
+                    cx - ringRadius,
+                    cy - ringRadius,
+                    cx + ringRadius,
+                    cy + ringRadius
+                )
                 val perimeter = Path().apply {
-                    moveTo(midX, top)
-                    lineTo(right - ringCorner, top)
-                    arcTo(
-                        RectF(right - 2 * ringCorner, top, right, top + 2 * ringCorner),
-                        -90f, 90f, false
-                    )
-                    lineTo(right, bottom - ringCorner)
-                    arcTo(
-                        RectF(right - 2 * ringCorner, bottom - 2 * ringCorner, right, bottom),
-                        0f, 90f, false
-                    )
-                    lineTo(left + ringCorner, bottom)
-                    arcTo(
-                        RectF(left, bottom - 2 * ringCorner, left + 2 * ringCorner, bottom),
-                        90f, 90f, false
-                    )
-                    lineTo(left, top + ringCorner)
-                    arcTo(
-                        RectF(left, top, left + 2 * ringCorner, top + 2 * ringCorner),
-                        180f, 90f, false
-                    )
-                    lineTo(midX, top)
+                    addArc(ringOval, -90f, 360f)
                 }
 
                 val pm = PathMeasure(perimeter, false)
@@ -395,59 +371,18 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 }
 
                 val count = cycleColors.size
-                val fadeFraction = 0.30f
-                val subSteps = 8
-                cycleColors.forEachIndexed { index, segColor ->
-                    val segStart = totalLength * index / count
-                    val segEnd = totalLength * (index + 1) / count
-                    val prevColor = if (index > 0) cycleColors[index - 1] else segColor
-                    val nextColor = if (index < count - 1) cycleColors[index + 1] else segColor
-
-                    if (prevColor == segColor && nextColor == segColor) {
-                        segPath.reset()
-                        pm.getSegment(segStart, segEnd, segPath, true)
-                        segPaint.color = segColor
-                        canvas.drawPath(segPath, segPaint)
-                    } else {
-                        for (s in 0 until subSteps) {
-                            val u0 = s.toFloat() / subSteps
-                            val u1 = (s + 1).toFloat() / subSteps
-                            val uMid = (u0 + u1) * 0.5f
-                            val stepColor = when {
-                                uMid < fadeFraction && prevColor != segColor -> {
-                                    val midEdge = lerpColor(prevColor, segColor, 0.5f)
-                                    lerpColor(midEdge, segColor, uMid / fadeFraction)
-                                }
-                                uMid > 1f - fadeFraction && nextColor != segColor -> {
-                                    val midEdge = lerpColor(segColor, nextColor, 0.5f)
-                                    lerpColor(segColor, midEdge, (uMid - (1f - fadeFraction)) / fadeFraction)
-                                }
-                                else -> segColor
-                            }
-                            val d0 = segStart + (segEnd - segStart) * u0
-                            val d1 = min(segEnd, segStart + (segEnd - segStart) * u1 + 0.5f)
-                            segPath.reset()
-                            pm.getSegment(d0, d1, segPath, true)
-                            segPaint.color = stepColor
-                            canvas.drawPath(segPath, segPaint)
-                        }
-                    }
+                val totalSteps = count * 8
+                for (step in 0 until totalSteps) {
+                    val d0 = totalLength * step / totalSteps
+                    val d1 = min(totalLength, totalLength * (step + 1) / totalSteps + 0.6f)
+                    val dayPos = count * (step + 0.5f) / totalSteps
+                    segPath.reset()
+                    pm.getSegment(d0, d1, segPath, true)
+                    segPaint.color = sampleSmoothCycleColor(cycleColors, dayPos)
+                    canvas.drawPath(segPath, segPaint)
                 }
 
-                // Top-center tick marking Cycle Day 1 (period start)
-                val tickPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    style = Paint.Style.STROKE
-                    this.strokeWidth = (if (isCompact) 1.6f else 2f) * dp
-                    strokeCap = Paint.Cap.ROUND
-                    color = Color.WHITE
-                }
-                canvas.drawLine(
-                    midX, top - strokeWidth * 0.6f,
-                    midX, top + strokeWidth * 0.6f,
-                    tickPaint
-                )
-
-                // Highlight current cycle day on the outline (translucent halo + deep solid dot)
+                // Highlight current cycle day on the outline (opaque halo + deep solid dot)
                 val currentDay = todayInfo.cycleDay
                 if (currentDay != null) {
                     val clampedIndex = ((currentDay - 1) % count + count) % count
@@ -478,13 +413,56 @@ class CycleWidgetProvider : AppWidgetProvider() {
             return bitmap
         }
 
-        private fun lerpColor(c1: Int, c2: Int, t: Float): Int {
-            val f = t.coerceIn(0f, 1f)
-            val a = (Color.alpha(c1) + (Color.alpha(c2) - Color.alpha(c1)) * f).toInt()
-            val r = (Color.red(c1) + (Color.red(c2) - Color.red(c1)) * f).toInt()
-            val g = (Color.green(c1) + (Color.green(c2) - Color.green(c1)) * f).toInt()
-            val b = (Color.blue(c1) + (Color.blue(c2) - Color.blue(c1)) * f).toInt()
-            return Color.argb(a, r, g, b)
+        private fun buildSquirclePath(rect: RectF, exponent: Float = 3.2f, steps: Int = 128): Path {
+            val path = Path()
+            val cx = rect.centerX()
+            val cy = rect.centerY()
+            val rx = rect.width() / 2f
+            val ry = rect.height() / 2f
+            val invExp = 2.0 / exponent
+            for (i in 0 until steps) {
+                val theta = 2.0 * PI * i / steps
+                val cosT = cos(theta)
+                val sinT = sin(theta)
+                val x = cx + (rx * sign(cosT) * abs(cosT).pow(invExp)).toFloat()
+                val y = cy + (ry * sign(sinT) * abs(sinT).pow(invExp)).toFloat()
+                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+            }
+            path.close()
+            return path
+        }
+
+        private fun sampleSmoothCycleColor(
+            colors: List<Int>,
+            dayPos: Float,
+            blendRadius: Float = 1.6f
+        ): Int {
+            val count = colors.size
+            if (count == 0) return Color.TRANSPARENT
+            var wSum = 0f
+            var rSum = 0f
+            var gSum = 0f
+            var bSum = 0f
+            val startIdx = max(0, (dayPos - blendRadius).toInt())
+            val endIdx = min(count - 1, (dayPos + blendRadius).toInt() + 1)
+            for (i in startIdx..endIdx) {
+                val center = i + 0.5f
+                val dist = abs(dayPos - center)
+                if (dist <= blendRadius) {
+                    val weight = 0.5f * (1f + cos((PI * dist / blendRadius).toFloat()))
+                    val c = colors[i]
+                    rSum += Color.red(c) * weight
+                    gSum += Color.green(c) * weight
+                    bSum += Color.blue(c) * weight
+                    wSum += weight
+                }
+            }
+            if (wSum <= 0f) return colors[dayPos.toInt().coerceIn(0, count - 1)]
+            return Color.rgb(
+                (rSum / wSum).toInt().coerceIn(0, 255),
+                (gSum / wSum).toInt().coerceIn(0, 255),
+                (bSum / wSum).toInt().coerceIn(0, 255)
+            )
         }
 
         private data class WidgetStyle(

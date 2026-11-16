@@ -34,9 +34,6 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.pow
-import kotlin.math.sign
-import kotlin.math.sin
 
 class CycleWidgetProvider : AppWidgetProvider() {
 
@@ -276,13 +273,25 @@ class CycleWidgetProvider : AppWidgetProvider() {
             val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(bitmap)
 
-            val strokeWidth = (if (isCompact) 3.8f else 5.5f) * dp
+            val strokeWidth = (if (isCompact) 4.2f else 6f) * dp
+            val markerOverflow = (if (isCompact) 3.5f else 5.5f) * dp
             val cardInset = 1.5f * dp
-            val ringInset = strokeWidth / 2f + (if (isCompact) 5.5f else 9f) * dp
+            val ringInset = max(
+                markerOverflow + strokeWidth / 2f,
+                cardInset + strokeWidth / 2f + (if (isCompact) 1.5f else 2.5f) * dp
+            )
 
-            // 1. Draw diagonal gradient expressive squircle card + frosted sheen + specular border
+            val cardCorner = min(
+                (if (isCompact) 18f else 28f) * dp,
+                (min(w, h) - cardInset * 2f) / 2f
+            )
+            val ringCorner = max(
+                4f * dp,
+                cardCorner - (ringInset - cardInset)
+            )
+
+            // 1. Draw diagonal gradient rounded card fill + frosted glass sheen + specular border
             val cardRect = RectF(cardInset, cardInset, w - cardInset, h - cardInset)
-            val cardPath = buildSquirclePath(cardRect)
             val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.FILL
                 shader = LinearGradient(
@@ -293,7 +302,7 @@ class CycleWidgetProvider : AppWidgetProvider() {
                     Shader.TileMode.CLAMP
                 )
             }
-            canvas.drawPath(cardPath, fillPaint)
+            canvas.drawRoundRect(cardRect, cardCorner, cardCorner, fillPaint)
 
             // Frosted top-left glass sheen
             val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -301,12 +310,12 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 shader = LinearGradient(
                     cardRect.left, cardRect.top,
                     cardRect.left, cardRect.top + cardRect.height() * 0.65f,
-                    intArrayOf(Color.argb(24, 255, 255, 255), Color.TRANSPARENT),
+                    intArrayOf(Color.argb(28, 255, 255, 255), Color.TRANSPARENT),
                     null,
                     Shader.TileMode.CLAMP
                 )
             }
-            canvas.drawPath(cardPath, sheenPaint)
+            canvas.drawRoundRect(cardRect, cardCorner, cardCorner, sheenPaint)
 
             // Delicate inner specular glass border
             val glassBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -326,9 +335,9 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 cardRect.right - 0.6f * dp,
                 cardRect.bottom - 0.6f * dp
             )
-            canvas.drawPath(buildSquirclePath(borderRect), glassBorderPaint)
+            canvas.drawRoundRect(borderRect, cardCorner, cardCorner, glassBorderPaint)
 
-            // 2. If cycle data exists, draw the circular cycle-colored outline starting at top-center
+            // 2. If cycle data exists, draw the cycle-colored perimeter outline starting at top-center
             if (model.hasData && periodStarts.isNotEmpty()) {
                 val sortedStarts = periodStarts.sorted()
                 val cycleStart = sortedStarts.last()
@@ -348,17 +357,35 @@ class CycleWidgetProvider : AppWidgetProvider() {
                     }
                 }
 
-                val cx = w / 2f
-                val cy = h / 2f
-                val ringRadius = max(20f * dp, min(cardRect.width(), cardRect.height()) / 2f - ringInset)
-                val ringOval = RectF(
-                    cx - ringRadius,
-                    cy - ringRadius,
-                    cx + ringRadius,
-                    cy + ringRadius
-                )
+                val left = ringInset
+                val top = ringInset
+                val right = w - ringInset
+                val bottom = h - ringInset
+                val midX = w / 2f
+
                 val perimeter = Path().apply {
-                    addArc(ringOval, -90f, 360f)
+                    moveTo(midX, top)
+                    lineTo(right - ringCorner, top)
+                    arcTo(
+                        RectF(right - 2 * ringCorner, top, right, top + 2 * ringCorner),
+                        -90f, 90f, false
+                    )
+                    lineTo(right, bottom - ringCorner)
+                    arcTo(
+                        RectF(right - 2 * ringCorner, bottom - 2 * ringCorner, right, bottom),
+                        0f, 90f, false
+                    )
+                    lineTo(left + ringCorner, bottom)
+                    arcTo(
+                        RectF(left, bottom - 2 * ringCorner, left + 2 * ringCorner, bottom),
+                        90f, 90f, false
+                    )
+                    lineTo(left, top + ringCorner)
+                    arcTo(
+                        RectF(left, top, left + 2 * ringCorner, top + 2 * ringCorner),
+                        180f, 90f, false
+                    )
+                    lineTo(midX, top)
                 }
 
                 val pm = PathMeasure(perimeter, false)
@@ -411,25 +438,6 @@ class CycleWidgetProvider : AppWidgetProvider() {
             }
 
             return bitmap
-        }
-
-        private fun buildSquirclePath(rect: RectF, exponent: Float = 3.2f, steps: Int = 128): Path {
-            val path = Path()
-            val cx = rect.centerX()
-            val cy = rect.centerY()
-            val rx = rect.width() / 2f
-            val ry = rect.height() / 2f
-            val invExp = 2.0 / exponent
-            for (i in 0 until steps) {
-                val theta = 2.0 * PI * i / steps
-                val cosT = cos(theta)
-                val sinT = sin(theta)
-                val x = cx + (rx * sign(cosT) * abs(cosT).pow(invExp)).toFloat()
-                val y = cy + (ry * sign(sinT) * abs(sinT).pow(invExp)).toFloat()
-                if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
-            }
-            path.close()
-            return path
         }
 
         private fun sampleSmoothCycleColor(

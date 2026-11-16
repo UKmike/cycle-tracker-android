@@ -65,6 +65,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -410,16 +411,49 @@ private fun HomeWidgetPreviewCard(
                     style = Stroke(width = strokeWidth + 3.dp.toPx(), cap = StrokeCap.Butt)
                 )
 
+                val fadeFraction = 0.30f
+                val subSteps = 8
                 cycleColors.forEachIndexed { index, color ->
-                    val startDist = totalLength * index / count
-                    val endDist = totalLength * (index + 1) / count
-                    segmentPath.reset()
-                    pathMeasure.getSegment(startDist, endDist, segmentPath, startWithMoveTo = true)
-                    drawPath(
-                        path = segmentPath,
-                        color = color,
-                        style = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
-                    )
+                    val segStart = totalLength * index / count
+                    val segEnd = totalLength * (index + 1) / count
+                    val prevColor = if (index > 0) cycleColors[index - 1] else color
+                    val nextColor = if (index < count - 1) cycleColors[index + 1] else color
+
+                    if (prevColor == color && nextColor == color) {
+                        segmentPath.reset()
+                        pathMeasure.getSegment(segStart, segEnd, segmentPath, startWithMoveTo = true)
+                        drawPath(
+                            path = segmentPath,
+                            color = color,
+                            style = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
+                        )
+                    } else {
+                        for (s in 0 until subSteps) {
+                            val u0 = s.toFloat() / subSteps
+                            val u1 = (s + 1).toFloat() / subSteps
+                            val uMid = (u0 + u1) * 0.5f
+                            val stepColor = when {
+                                uMid < fadeFraction && prevColor != color -> {
+                                    val midEdge = lerp(prevColor, color, 0.5f)
+                                    lerp(midEdge, color, uMid / fadeFraction)
+                                }
+                                uMid > 1f - fadeFraction && nextColor != color -> {
+                                    val midEdge = lerp(color, nextColor, 0.5f)
+                                    lerp(color, midEdge, (uMid - (1f - fadeFraction)) / fadeFraction)
+                                }
+                                else -> color
+                            }
+                            val d0 = segStart + (segEnd - segStart) * u0
+                            val d1 = (segStart + (segEnd - segStart) * u1 + 0.5f).coerceAtMost(segEnd)
+                            segmentPath.reset()
+                            pathMeasure.getSegment(d0, d1, segmentPath, startWithMoveTo = true)
+                            drawPath(
+                                path = segmentPath,
+                                color = stepColor,
+                                style = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
+                            )
+                        }
+                    }
                 }
 
                 // Top-center tick marking Cycle Day 1 (period start)

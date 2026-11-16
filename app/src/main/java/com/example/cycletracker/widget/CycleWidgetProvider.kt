@@ -393,13 +393,43 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 }
 
                 val count = cycleColors.size
+                val fadeFraction = 0.30f
+                val subSteps = 8
                 cycleColors.forEachIndexed { index, segColor ->
-                    val startDist = totalLength * index / count
-                    val endDist = totalLength * (index + 1) / count
-                    segPath.reset()
-                    pm.getSegment(startDist, endDist, segPath, true)
-                    segPaint.color = segColor
-                    canvas.drawPath(segPath, segPaint)
+                    val segStart = totalLength * index / count
+                    val segEnd = totalLength * (index + 1) / count
+                    val prevColor = if (index > 0) cycleColors[index - 1] else segColor
+                    val nextColor = if (index < count - 1) cycleColors[index + 1] else segColor
+
+                    if (prevColor == segColor && nextColor == segColor) {
+                        segPath.reset()
+                        pm.getSegment(segStart, segEnd, segPath, true)
+                        segPaint.color = segColor
+                        canvas.drawPath(segPath, segPaint)
+                    } else {
+                        for (s in 0 until subSteps) {
+                            val u0 = s.toFloat() / subSteps
+                            val u1 = (s + 1).toFloat() / subSteps
+                            val uMid = (u0 + u1) * 0.5f
+                            val stepColor = when {
+                                uMid < fadeFraction && prevColor != segColor -> {
+                                    val midEdge = lerpColor(prevColor, segColor, 0.5f)
+                                    lerpColor(midEdge, segColor, uMid / fadeFraction)
+                                }
+                                uMid > 1f - fadeFraction && nextColor != segColor -> {
+                                    val midEdge = lerpColor(segColor, nextColor, 0.5f)
+                                    lerpColor(segColor, midEdge, (uMid - (1f - fadeFraction)) / fadeFraction)
+                                }
+                                else -> segColor
+                            }
+                            val d0 = segStart + (segEnd - segStart) * u0
+                            val d1 = min(segEnd, segStart + (segEnd - segStart) * u1 + 0.5f)
+                            segPath.reset()
+                            pm.getSegment(d0, d1, segPath, true)
+                            segPaint.color = stepColor
+                            canvas.drawPath(segPath, segPaint)
+                        }
+                    }
                 }
 
                 // Top-center tick marking Cycle Day 1 (period start)
@@ -440,6 +470,15 @@ class CycleWidgetProvider : AppWidgetProvider() {
             }
 
             return bitmap
+        }
+
+        private fun lerpColor(c1: Int, c2: Int, t: Float): Int {
+            val f = t.coerceIn(0f, 1f)
+            val a = (Color.alpha(c1) + (Color.alpha(c2) - Color.alpha(c1)) * f).toInt()
+            val r = (Color.red(c1) + (Color.red(c2) - Color.red(c1)) * f).toInt()
+            val g = (Color.green(c1) + (Color.green(c2) - Color.green(c1)) * f).toInt()
+            val b = (Color.blue(c1) + (Color.blue(c2) - Color.blue(c1)) * f).toInt()
+            return Color.argb(a, r, g, b)
         }
 
         private data class WidgetStyle(

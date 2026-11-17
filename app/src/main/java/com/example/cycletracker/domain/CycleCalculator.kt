@@ -35,7 +35,9 @@ data class DayClassification(
     val periodStatus: PeriodStatus?,
     val cycleDay: Int?,
     val daysToNextPeriod: Int?,
-    val nextPeriodDate: LocalDate?
+    val nextPeriodDate: LocalDate?,
+    val daysLate: Int = 0,
+    val expectedPeriodDate: LocalDate? = null
 )
 
 object CycleCalculator {
@@ -166,10 +168,21 @@ object CycleCalculator {
 
         val cycleDay = ChronoUnit.DAYS.between(cycleAnchor, date).toInt() + 1
         val nextPeriodDate = cycleAnchor.plusDays(cycleLengthForAnchor.toLong())
-        val daysToNextPeriod = ChronoUnit.DAYS.between(date, nextPeriodDate).toInt()
+        val expectedPeriodDate = lastStart.plusDays(avg.toLong())
+        val daysSinceLastStart = ChronoUnit.DAYS.between(lastStart, date).toInt()
+        val daysLate = if (!date.isBefore(lastStart) && daysSinceLastStart > avg) {
+            daysSinceLastStart - avg
+        } else {
+            0
+        }
+        val daysToNextPeriod = if (!date.isBefore(lastStart) && daysSinceLastStart == avg) {
+            0
+        } else {
+            ChronoUnit.DAYS.between(date, nextPeriodDate).toInt()
+        }
 
         // Predicted period if after the current cycle's expected start
-        if (periodStatus == null && !date.isBefore(lastStart.plusDays(avg.toLong()))) {
+        if (periodStatus == null && !date.isBefore(expectedPeriodDate)) {
             if (cycleDay == 1) {
                 periodStatus = PeriodStatus.PREDICTED_START
             } else if (cycleDay in 2..periodLength) {
@@ -207,7 +220,9 @@ object CycleCalculator {
             periodStatus = periodStatus,
             cycleDay = cycleDay,
             daysToNextPeriod = daysToNextPeriod,
-            nextPeriodDate = nextPeriodDate
+            nextPeriodDate = nextPeriodDate,
+            daysLate = daysLate,
+            expectedPeriodDate = expectedPeriodDate
         )
     }
 }

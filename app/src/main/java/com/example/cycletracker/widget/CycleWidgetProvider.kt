@@ -228,6 +228,21 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 views.setTextViewText(R.id.widget_compact_unit, "Days")
                 views.setTextViewText(R.id.widget_subtitle, "to next period")
                 views.setTextViewText(R.id.widget_footer, "Tap to log period")
+            } else if (info.daysLate > 0) {
+                val late = info.daysLate
+                val unit = if (late == 1) "day" else "days"
+                val compactUnit = if (late == 1) "Day late" else "Days late"
+                views.setTextViewText(R.id.widget_status_badge, "Period Late")
+                views.setTextViewText(R.id.widget_days_number, late.toString())
+                views.setTextViewText(R.id.widget_days_unit, unit)
+                views.setTextViewText(R.id.widget_compact_unit, compactUnit)
+                views.setTextViewText(R.id.widget_subtitle, "late")
+                val expectedStr = info.expectedPeriodDate?.format(shortDateFmt)
+                    ?: info.nextPeriodDate.format(shortDateFmt)
+                views.setTextViewText(
+                    R.id.widget_footer,
+                    "Day ${model.averageCycleLength + late} • Expected $expectedStr"
+                )
             } else {
                 val days = info.daysToNextPeriod
                 val unit = if (days == 1) "day" else "days"

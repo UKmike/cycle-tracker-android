@@ -411,12 +411,13 @@ private fun HomeWidgetPreviewCard(
                 )
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
+                val displayStatus = if (hasData && todayInfo.daysLate > 0) "Period Late" else statusText
                 Surface(
                     color = contentColor.copy(alpha = 0.18f),
                     shape = RoundedCornerShape(50)
                 ) {
                     Text(
-                        text = statusText,
+                        text = displayStatus,
                         color = contentColor,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -426,11 +427,14 @@ private fun HomeWidgetPreviewCard(
 
                 Spacer(Modifier.height(8.dp))
 
+                val displayCount = when {
+                    !hasData -> null
+                    todayInfo.daysLate > 0 -> todayInfo.daysLate
+                    else -> todayInfo.daysToNextPeriod
+                }
                 Row(verticalAlignment = Alignment.Bottom) {
                     Text(
-                        text = if (hasData && todayInfo.daysToNextPeriod != null) {
-                            todayInfo.daysToNextPeriod.toString()
-                        } else "--",
+                        text = displayCount?.toString() ?: "--",
                         color = contentColor,
                         fontSize = 36.sp,
                         fontWeight = FontWeight.Bold,
@@ -438,7 +442,7 @@ private fun HomeWidgetPreviewCard(
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
-                        text = if (todayInfo.daysToNextPeriod == 1) "day" else "days",
+                        text = if (displayCount == 1) "day" else "days",
                         color = contentColor.copy(alpha = 0.9f),
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
@@ -449,6 +453,7 @@ private fun HomeWidgetPreviewCard(
                 Text(
                     text = when {
                         !hasData -> "Log your last period start to begin"
+                        todayInfo.daysLate > 0 -> "late"
                         todayInfo.daysToNextPeriod == 0 -> "Period expected today"
                         else -> "to next period"
                     },
@@ -460,8 +465,13 @@ private fun HomeWidgetPreviewCard(
                 if (hasData && todayInfo.nextPeriodDate != null) {
                     Spacer(Modifier.height(6.dp))
                     val fmt = DateTimeFormatter.ofPattern("MMM d")
+                    val footerText = if (todayInfo.daysLate > 0 && todayInfo.expectedPeriodDate != null) {
+                        "Cycle Day ${model.averageCycleLength + todayInfo.daysLate}  •  Expected: ${todayInfo.expectedPeriodDate.format(fmt)}"
+                    } else {
+                        "Cycle Day ${todayInfo.cycleDay}  •  Next period: ${todayInfo.nextPeriodDate.format(fmt)}"
+                    }
                     Text(
-                        text = "Cycle Day ${todayInfo.cycleDay}  •  Next period: ${todayInfo.nextPeriodDate.format(fmt)}",
+                        text = footerText,
                         color = contentColor.copy(alpha = 0.85f),
                         fontSize = 11.sp
                     )
@@ -750,6 +760,10 @@ private fun CalendarCard(
                 )
                 val statusLabel = when {
                     !model.hasData -> "Tap 'Log Period' to begin"
+                    selectedDate == today && selectedInfo.daysLate > 0 -> {
+                        val unit = if (selectedInfo.daysLate == 1) "day" else "days"
+                        "Period ${selectedInfo.daysLate} $unit late • Day ${model.averageCycleLength + selectedInfo.daysLate}"
+                    }
                     selectedInfo.periodStatus == PeriodStatus.LOGGED_START -> "Period Start • Day ${selectedInfo.cycleDay}"
                     selectedInfo.periodStatus == PeriodStatus.LOGGED -> "Period • Day ${selectedInfo.cycleDay}"
                     selectedInfo.periodStatus == PeriodStatus.PREDICTED_START ||

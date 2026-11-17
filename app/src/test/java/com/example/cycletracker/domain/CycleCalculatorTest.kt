@@ -81,4 +81,21 @@ class CycleCalculatorTest {
         assertEquals(FertilityStatus.COULD_BE_FERTILE, day27.fertility)
         assertEquals(FertilityStatus.NOT_FERTILE, day28.fertility)
     }
+
+    @Test
+    fun tracksDaysLateAfterExpectedStart() {
+        val start = LocalDate.of(2026, 11, 1)
+        val starts = listOf(start)
+        val model = CycleCalculator.computeModel(starts) // 28-day default
+
+        val expectedDay = start.plusDays(28)
+        val onExpected = CycleCalculator.classifyDate(expectedDay, starts, model)
+        assertEquals(0, onExpected.daysToNextPeriod)
+        assertEquals(0, onExpected.daysLate)
+        assertEquals(expectedDay, onExpected.expectedPeriodDate)
+
+        val threeDaysLate = CycleCalculator.classifyDate(expectedDay.plusDays(3), starts, model)
+        assertEquals(3, threeDaysLate.daysLate)
+        assertEquals(expectedDay, threeDaysLate.expectedPeriodDate)
+    }
 }

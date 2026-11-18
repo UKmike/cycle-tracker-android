@@ -132,8 +132,8 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 .toEpochMilli()
 
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            alarmManager.setAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
+            alarmManager.set(
+                AlarmManager.RTC,
                 nextMidnightMillis,
                 midnightPendingIntent(context)
             )

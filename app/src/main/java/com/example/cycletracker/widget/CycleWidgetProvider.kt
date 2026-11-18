@@ -1,5 +1,6 @@
 package com.example.cycletracker.widget
 
+import android.app.AlarmManager
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
@@ -28,6 +29,7 @@ import com.example.cycletracker.domain.DayClassification
 import com.example.cycletracker.domain.FertilityStatus
 import com.example.cycletracker.domain.PeriodStatus
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import kotlin.math.PI
 import kotlin.math.abs
@@ -37,6 +39,16 @@ import kotlin.math.min
 
 class CycleWidgetProvider : AppWidgetProvider() {
 
+    override fun onEnabled(context: Context) {
+        super.onEnabled(context)
+        scheduleMidnightUpdate(context)
+    }
+
+    override fun onDisabled(context: Context) {
+        super.onDisabled(context)
+        cancelMidnightUpdate(context)
+    }
+
     override fun onUpdate(
         context: Context,
         appWidgetManager: AppWidgetManager,
@@ -45,6 +57,7 @@ class CycleWidgetProvider : AppWidgetProvider() {
         for (appWidgetId in appWidgetIds) {
             updateWidget(context, appWidgetManager, appWidgetId)
         }
+        scheduleMidnightUpdate(context)
     }
 
     override fun onAppWidgetOptionsChanged(
@@ -60,13 +73,20 @@ class CycleWidgetProvider : AppWidgetProvider() {
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         when (intent.action) {
+            ACTION_MIDNIGHT_UPDATE,
             Intent.ACTION_DATE_CHANGED,
             Intent.ACTION_TIME_CHANGED,
-            Intent.ACTION_TIMEZONE_CHANGED -> updateAllWidgets(context)
+            Intent.ACTION_TIMEZONE_CHANGED,
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_MY_PACKAGE_REPLACED -> updateAllWidgets(context)
         }
     }
 
     companion object {
+        private const val ACTION_MIDNIGHT_UPDATE =
+            "com.example.cycletracker.action.MIDNIGHT_WIDGET_UPDATE"
+        private const val MIDNIGHT_REQUEST_CODE = 1001
+
         private val shortDateFmt = DateTimeFormatter.ofPattern("MMM d")
 
         private val COLOR_GREEN = Color.parseColor("#059669")
@@ -81,6 +101,47 @@ class CycleWidgetProvider : AppWidgetProvider() {
             for (id in ids) {
                 updateWidget(context, manager, id)
             }
+            if (ids.isNotEmpty()) {
+                scheduleMidnightUpdate(context)
+            } else {
+                cancelMidnightUpdate(context)
+            }
+        }
+
+        private fun midnightPendingIntent(context: Context): PendingIntent {
+            val intent = Intent(context, CycleWidgetProvider::class.java).apply {
+                action = ACTION_MIDNIGHT_UPDATE
+            }
+            return PendingIntent.getBroadcast(
+                context,
+                MIDNIGHT_REQUEST_CODE,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+
+        fun scheduleMidnightUpdate(context: Context) {
+            val manager = AppWidgetManager.getInstance(context)
+            val componentName = ComponentName(context, CycleWidgetProvider::class.java)
+            if (manager.getAppWidgetIds(componentName).isEmpty()) return
+
+            val nextMidnightMillis = LocalDate.now()
+                .plusDays(1)
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            alarmManager.setAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                nextMidnightMillis,
+                midnightPendingIntent(context)
+            )
+        }
+
+        private fun cancelMidnightUpdate(context: Context) {
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            alarmManager.cancel(midnightPendingIntent(context))
         }
 
         private fun updateWidget(

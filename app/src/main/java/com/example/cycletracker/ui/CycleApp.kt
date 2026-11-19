@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,11 +26,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -73,12 +73,17 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -231,16 +236,20 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .fillMaxHeight(0.88f)
+                        .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    CycleLengthGraphCard(
+                        periodStarts = state.periodStarts,
+                        model = state.model
+                    )
                     InsightsCard(model = state.model)
                     HistoryCard(
                         periodStarts = state.periodStarts,
-                        onRemove = viewModel::removePeriodStart
+                        onRemove = viewModel::removePeriodStart,
+                        modifier = Modifier.weight(1f)
                     )
-                    Spacer(Modifier.height(24.dp))
                 }
             }
         }
@@ -1216,13 +1225,236 @@ private fun LegendItem(color: Color, label: String, modifier: Modifier = Modifie
 }
 
 @Composable
+private fun CycleLengthGraphCard(
+    periodStarts: List<LocalDate>,
+    model: CycleModel
+) {
+    val sortedAsc = remember(periodStarts) { periodStarts.sorted() }
+    val allCycles = remember(sortedAsc) {
+        (0 until (sortedAsc.size - 1)).map { i ->
+            sortedAsc[i] to ChronoUnit.DAYS.between(sortedAsc[i], sortedAsc[i + 1]).toInt()
+        }
+    }
+    val recentCycles = remember(allCycles) { allCycles.takeLast(12) }
+
+    val gridColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val dotCenterColor = MaterialTheme.colorScheme.surface
+    val textMeasurer = rememberTextMeasurer()
+    val valueStyle = TextStyle(
+        color = MaterialTheme.colorScheme.onSurface,
+        fontSize = 10.sp,
+        fontWeight = FontWeight.SemiBold
+    )
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Cycle Length Trend",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = when {
+                        allCycles.isEmpty() -> "No cycles yet"
+                        allCycles.size > 12 -> "Last 12 cycles"
+                        allCycles.size == 1 -> "1 cycle"
+                        else -> "${allCycles.size} cycles"
+                    },
+                    fontSize = 11.sp,
+                    color = labelColor
+                )
+            }
+
+            if (recentCycles.isEmpty()) {
+                Text(
+                    text = "Log at least 2 period start dates to see your cycle length graph.",
+                    fontSize = 12.sp,
+                    color = labelColor
+                )
+            } else {
+                val rawMin = minOf(recentCycles.minOf { it.second }, model.averageCycleLength)
+                val rawMax = maxOf(recentCycles.maxOf { it.second }, model.averageCycleLength)
+                val minY = (rawMin - 2).coerceAtLeast(0)
+                val maxY = (rawMax + 2).coerceAtLeast(minY + 4)
+                val midY = (minY + maxY) / 2
+                val spanY = (maxY - minY).toFloat()
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .width(34.dp)
+                            .fillMaxHeight()
+                            .padding(top = 12.dp, bottom = 4.dp),
+                        verticalArrangement = Arrangement.SpaceBetween,
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        Text("${maxY}d", fontSize = 10.sp, color = labelColor)
+                        Text("${midY}d", fontSize = 10.sp, color = labelColor)
+                        Text("${minY}d", fontSize = 10.sp, color = labelColor)
+                    }
+
+                    Spacer(Modifier.width(6.dp))
+
+                    Canvas(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                    ) {
+                        val topPad = 18.dp.toPx()
+                        val bottomPad = 8.dp.toPx()
+                        val sidePad = 12.dp.toPx()
+                        val plotH = (size.height - topPad - bottomPad).coerceAtLeast(1f)
+                        val plotW = (size.width - sidePad * 2f).coerceAtLeast(1f)
+
+                        fun yFor(days: Float): Float =
+                            topPad + plotH * (1f - (days - minY) / spanY)
+
+                        // Subtle horizontal gridlines
+                        listOf(maxY.toFloat(), midY.toFloat(), minY.toFloat()).forEach { level ->
+                            val y = yFor(level)
+                            drawLine(
+                                color = gridColor,
+                                start = Offset(0f, y),
+                                end = Offset(size.width, y),
+                                strokeWidth = 1.dp.toPx()
+                            )
+                        }
+
+                        // Dashed average reference line
+                        val avgY = yFor(model.averageCycleLength.toFloat())
+                        drawLine(
+                            color = RedPeriod.copy(alpha = 0.45f),
+                            start = Offset(0f, avgY),
+                            end = Offset(size.width, avgY),
+                            strokeWidth = 1.2.dp.toPx(),
+                            pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f), 0f)
+                        )
+
+                        val points = recentCycles.mapIndexed { idx, (_, days) ->
+                            val x = if (recentCycles.size == 1) {
+                                size.width / 2f
+                            } else {
+                                sidePad + plotW * idx / (recentCycles.size - 1)
+                            }
+                            Offset(x, yFor(days.toFloat()))
+                        }
+
+                        if (points.size >= 2) {
+                            val linePath = Path().apply {
+                                moveTo(points.first().x, points.first().y)
+                                for (i in 1 until points.size) {
+                                    lineTo(points[i].x, points[i].y)
+                                }
+                            }
+                            val bottomY = topPad + plotH
+                            val fillPath = Path().apply {
+                                addPath(linePath)
+                                lineTo(points.last().x, bottomY)
+                                lineTo(points.first().x, bottomY)
+                                close()
+                            }
+                            drawPath(
+                                path = fillPath,
+                                brush = Brush.verticalGradient(
+                                    colors = listOf(
+                                        RedPeriod.copy(alpha = 0.22f),
+                                        Color.Transparent
+                                    ),
+                                    startY = topPad,
+                                    endY = bottomY
+                                )
+                            )
+                            drawPath(
+                                path = linePath,
+                                color = RedPeriod,
+                                style = Stroke(
+                                    width = 2.5.dp.toPx(),
+                                    cap = StrokeCap.Round,
+                                    join = StrokeJoin.Round
+                                )
+                            )
+                        }
+
+                        points.forEachIndexed { idx, pt ->
+                            drawCircle(
+                                color = RedPeriod,
+                                radius = 4.5.dp.toPx(),
+                                center = pt
+                            )
+                            drawCircle(
+                                color = dotCenterColor,
+                                radius = 2.dp.toPx(),
+                                center = pt
+                            )
+
+                            val measured = textMeasurer.measure(
+                                text = recentCycles[idx].second.toString(),
+                                style = valueStyle
+                            )
+                            val labelX = (pt.x - measured.size.width / 2f)
+                                .coerceIn(0f, (size.width - measured.size.width).coerceAtLeast(0f))
+                            val labelY = (pt.y - measured.size.height - 5.dp.toPx()).coerceAtLeast(0f)
+                            drawText(
+                                textLayoutResult = measured,
+                                topLeft = Offset(labelX, labelY)
+                            )
+                        }
+                    }
+                }
+
+                val axisFmt = remember { DateTimeFormatter.ofPattern("MMM yy") }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 40.dp, end = 4.dp),
+                    horizontalArrangement = if (recentCycles.size == 1) {
+                        Arrangement.Center
+                    } else {
+                        Arrangement.SpaceBetween
+                    }
+                ) {
+                    Text(recentCycles.first().first.format(axisFmt), fontSize = 10.sp, color = labelColor)
+                    if (recentCycles.size >= 3) {
+                        Text(
+                            recentCycles[recentCycles.size / 2].first.format(axisFmt),
+                            fontSize = 10.sp,
+                            color = labelColor
+                        )
+                    }
+                    if (recentCycles.size >= 2) {
+                        Text(recentCycles.last().first.format(axisFmt), fontSize = 10.sp, color = labelColor)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun InsightsCard(model: CycleModel) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1262,18 +1494,28 @@ private fun StatTile(label: String, value: String, modifier: Modifier = Modifier
 @Composable
 private fun HistoryCard(
     periodStarts: List<LocalDate>,
-    onRemove: (LocalDate) -> Unit
+    onRemove: (LocalDate) -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val sortedDesc = periodStarts.sortedDescending()
-    val fmt = DateTimeFormatter.ofPattern("MMM d, yyyy")
+    val sortedDesc = remember(periodStarts) { periodStarts.sortedDescending() }
+    val fmt = remember { DateTimeFormatter.ofPattern("MMM d, yyyy") }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Period History (${sortedDesc.size})", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp, vertical = 14.dp)
+        ) {
+            Text(
+                text = "Period History (${sortedDesc.size})",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(8.dp))
 
             if (sortedDesc.isEmpty()) {
                 Text(
@@ -1282,32 +1524,97 @@ private fun HistoryCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
-                sortedDesc.forEachIndexed { index, date ->
-                    val cycleLen = if (index > 0) {
-                        ChronoUnit.DAYS.between(date, sortedDesc[index - 1]).toInt()
-                    } else null
+                // Column headers
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Start Date",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1.3f)
+                    )
+                    Text(
+                        text = "Cycle Days",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.weight(0.9f)
+                    )
+                    Spacer(Modifier.width(36.dp))
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(date.format(fmt), fontSize = 13.sp, fontWeight = FontWeight.Medium)
-                            if (cycleLen != null) {
-                                Text(
-                                    "$cycleLen day cycle",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    itemsIndexed(
+                        items = sortedDesc,
+                        key = { _, date -> date.toEpochDay() }
+                    ) { index, date ->
+                        val cycleLen = if (index > 0) {
+                            ChronoUnit.DAYS.between(date, sortedDesc[index - 1]).toInt()
+                        } else null
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = date.format(fmt),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.weight(1.3f)
+                            )
+                            Box(
+                                modifier = Modifier.weight(0.9f),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (cycleLen != null) {
+                                    Surface(
+                                        shape = RoundedCornerShape(50),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                                    ) {
+                                        Text(
+                                            text = "$cycleLen days",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                } else {
+                                    Text(
+                                        text = "Current",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            IconButton(
+                                onClick = { onRemove(date) },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Remove",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
-                        IconButton(onClick = { onRemove(date) }) {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = "Remove",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(18.dp)
+
+                        if (index < sortedDesc.lastIndex) {
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
                             )
                         }
                     }

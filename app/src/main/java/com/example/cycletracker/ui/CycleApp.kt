@@ -480,12 +480,12 @@ private fun HomeWidgetPreviewCard(
             .fillMaxWidth()
             .padding(4.dp)
     ) {
-        val glowBlur = (maxWidth * 0.03f).coerceAtMost(11.dp)
+        val glowBlur = (maxWidth * 0.038f).coerceAtMost(14.dp)
 
         // 1. Ambient glow behind the card, using the app's live cycle ring colors
         //    and swelling in sync with the floating wave dot's height.
         //    Uses BlurMaskFilter without a RenderEffect layer so the glow fades
-        //    smoothly past all four edges and finishes before the screen edge.
+        //    smoothly, stopping just before the left/right screen edges with fuller vertical spread.
         if (cycleColors.isNotEmpty()) {
             Box(
                 modifier = Modifier
@@ -493,7 +493,6 @@ private fun HomeWidgetPreviewCard(
                     .drawWithCache {
                         val blurPx = glowBlur.toPx().coerceAtLeast(1f)
                         val r = 28.dp.toPx().coerceAtMost(size.minDimension / 2f)
-                        val hInset = 2.dp.toPx()
                         val shader = cycleRingSweepShader(size, cycleColors)
                         val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
                             style = android.graphics.Paint.Style.FILL
@@ -502,15 +501,16 @@ private fun HomeWidgetPreviewCard(
                         }
                         onDrawBehind {
                             val b = dotGlowLevel()
-                            val s = lerpFloat(0.96f, 1.015f, b)
-                            val a = lerpFloat(0.12f, 0.78f, b)
+                            val sx = lerpFloat(0.97f, 1.022f, b)
+                            val sy = lerpFloat(0.97f, 1.075f, b)
+                            val a = lerpFloat(0.14f, 0.85f, b)
                             paint.alpha = (a * 255f).toInt().coerceIn(0, 255)
-                            scale(scaleX = s, scaleY = s, pivot = center) {
+                            scale(scaleX = sx, scaleY = sy, pivot = center) {
                                 drawIntoCanvas { canvas ->
                                     canvas.nativeCanvas.drawRoundRect(
-                                        hInset,
                                         0f,
-                                        size.width - hInset,
+                                        0f,
+                                        size.width,
                                         size.height,
                                         r,
                                         r,

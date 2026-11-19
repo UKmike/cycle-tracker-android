@@ -29,9 +29,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
@@ -45,7 +47,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -59,7 +60,6 @@ import android.provider.Settings
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -91,16 +91,12 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -135,7 +131,18 @@ private val RedPeriod = Color(0xFFDC2626)
 fun CycleApp(viewModel: CycleViewModel = viewModel()) {
     val state by viewModel.uiState.collectAsState()
     val isSelectedLogged = state.periodStarts.contains(state.selectedDate)
-    var showDetailsSheet by remember { mutableStateOf(false) }
+    var showHistoryPage by remember { mutableStateOf(false) }
+
+    if (showHistoryPage) {
+        BackHandler { showHistoryPage = false }
+        HistoryScreen(
+            periodStarts = state.periodStarts,
+            model = state.model,
+            onRemove = viewModel::removePeriodStart,
+            onBack = { showHistoryPage = false }
+        )
+        return
+    }
 
     Scaffold(
         topBar = {
@@ -159,7 +166,7 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
                             Text("Sample")
                         }
                     }
-                    IconButton(onClick = { showDetailsSheet = true }) {
+                    IconButton(onClick = { showHistoryPage = true }) {
                         Icon(
                             imageVector = Icons.Default.History,
                             contentDescription = "Cycle Insights & History"
@@ -243,31 +250,54 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
                 }
             }
         }
+    }
+}
 
-        if (showDetailsSheet) {
-            ModalBottomSheet(
-                onDismissRequest = { showDetailsSheet = false },
-                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight(0.88f)
-                        .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    CycleLengthGraphCard(
-                        periodStarts = state.periodStarts,
-                        model = state.model
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HistoryScreen(
+    periodStarts: List<LocalDate>,
+    model: CycleModel,
+    onRemove: (LocalDate) -> Unit,
+    onBack: () -> Unit
+) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        text = "Cycle History",
+                        fontWeight = FontWeight.Bold
                     )
-                    InsightsCard(model = state.model)
-                    HistoryCard(
-                        periodStarts = state.periodStarts,
-                        onRemove = viewModel::removePeriodStart,
-                        modifier = Modifier.weight(1f)
-                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
                 }
-            }
+            )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            CycleLengthGraphCard(
+                periodStarts = periodStarts,
+                model = model
+            )
+            InsightsCard(model = model)
+            HistoryCard(
+                periodStarts = periodStarts,
+                onRemove = onRemove,
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
@@ -1721,28 +1751,10 @@ private fun HistoryCard(
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                // Absorb leftover vertical scroll/fling so scrolling the history list
-                // never leaks into ModalBottomSheet and makes the sheet shake.
-                val blockSheetNestedScroll = remember {
-                    object : NestedScrollConnection {
-                        override fun onPostScroll(
-                            consumed: Offset,
-                            available: Offset,
-                            source: NestedScrollSource
-                        ): Offset = Offset(0f, available.y)
-
-                        override suspend fun onPostFling(
-                            consumed: Velocity,
-                            available: Velocity
-                        ): Velocity = Velocity(0f, available.y)
-                    }
-                }
-
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .nestedScroll(blockSheetNestedScroll)
                 ) {
                     itemsIndexed(
                         items = sortedDesc,

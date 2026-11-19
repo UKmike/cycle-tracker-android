@@ -1333,12 +1333,25 @@ private fun MonthSection(
                                 )
                             }
 
+                            val cellBrush = if (!model.hasData) {
+                                Brush.horizontalGradient(listOf(cellBg, cellBg))
+                            } else {
+                                val prevInfo = CycleCalculator.classifyDate(date.minusDays(1), periodStarts, model)
+                                val nextInfo = CycleCalculator.classifyDate(date.plusDays(1), periodStarts, model)
+                                val curIsPeriod = isPeriodDay(info)
+                                val sharpLeft = !isPeriodDay(prevInfo) && curIsPeriod
+                                val sharpRight = !curIsPeriod && isPeriodDay(nextInfo)
+                                val leftColor = if (sharpLeft) cellBg else lerpColor(cellBg, calendarBaseColor(prevInfo), 0.30f)
+                                val rightColor = if (sharpRight) cellBg else lerpColor(cellBg, calendarBaseColor(nextInfo), 0.30f)
+                                Brush.horizontalGradient(listOf(leftColor, cellBg, rightColor))
+                            }
+
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .aspectRatio(1f)
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(cellBg)
+                                    .background(cellBrush)
                                     .border(
                                         width = if (isSelected) 2.5.dp else 1.dp,
                                         color = if (isSelected) MaterialTheme.colorScheme.onSurface else cellBorder,
@@ -1406,6 +1419,29 @@ private fun MonthSection(
         }
     }
 }
+
+private fun isPeriodDay(info: DayClassification): Boolean =
+    info.periodStatus == PeriodStatus.LOGGED_START ||
+        info.periodStatus == PeriodStatus.LOGGED ||
+        info.periodStatus == PeriodStatus.PREDICTED_START ||
+        info.periodStatus == PeriodStatus.PREDICTED
+
+private fun calendarBaseColor(info: DayClassification): Color = when {
+    info.periodStatus == PeriodStatus.LOGGED_START ||
+        info.periodStatus == PeriodStatus.LOGGED -> RedPeriod
+    info.periodStatus == PeriodStatus.PREDICTED_START ||
+        info.periodStatus == PeriodStatus.PREDICTED -> Color(0xFFFCA5A5)
+    info.fertility == FertilityStatus.FERTILE -> GreenFertile
+    info.fertility == FertilityStatus.COULD_BE_FERTILE -> YellowCouldBe
+    else -> BlueNotFertile
+}
+
+private fun lerpColor(a: Color, b: Color, t: Float): Color = Color(
+    red = lerpFloat(a.red, b.red, t),
+    green = lerpFloat(a.green, b.green, t),
+    blue = lerpFloat(a.blue, b.blue, t),
+    alpha = lerpFloat(a.alpha, b.alpha, t)
+)
 
 @Composable
 private fun LegendItem(color: Color, label: String, modifier: Modifier = Modifier) {

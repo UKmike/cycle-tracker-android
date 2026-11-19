@@ -13,6 +13,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -53,12 +54,14 @@ import android.content.Context
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -67,18 +70,28 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.PathMeasure
+import androidx.compose.ui.graphics.Shader
+import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -405,12 +418,113 @@ private fun HomeWidgetPreviewCard(
     }
 
     val ringBackingColor = MaterialTheme.colorScheme.surface
+    val reducedMotion = rememberReducedMotion()
 
-    Box(
+    val isPeriodWave = todayInfo.periodStatus == PeriodStatus.LOGGED_START ||
+        todayInfo.periodStatus == PeriodStatus.LOGGED ||
+        todayInfo.periodStatus == PeriodStatus.PREDICTED_START ||
+        todayInfo.periodStatus == PeriodStatus.PREDICTED
+    val isFertileWave = !isPeriodWave && todayInfo.fertility == FertilityStatus.FERTILE
+    val isNotFertileWave = !isPeriodWave && todayInfo.fertility == FertilityStatus.NOT_FERTILE
+    val primaryDurationMs = when {
+        isNotFertileWave -> 6200
+        isFertileWave -> 3800
+        else -> 4600
+    }
+    val secondaryDurationMs = (primaryDurationMs * 1.9f).toInt()
+
+    val waveTransition = rememberInfiniteTransition(label = "cycleTide")
+    val primaryPhaseState = waveTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2.0 * PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = primaryDurationMs, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "primaryWavePhase"
+    )
+    val secondaryPhaseState = waveTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2.0 * PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = secondaryDurationMs, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "secondaryWavePhase"
+    )
+
+    // Normalized height [0f..1f] of the floating wave crest dot at x = 0.78 * width:
+    // 1f when the dot is at its highest point on screen, 0f when at its lowest.
+    // Read only inside graphicsLayer / draw lambdas so animation frames don't trigger recomposition.
+    val dotGlowLevel: () -> Float = remember(reducedMotion, primaryPhaseState, secondaryPhaseState) {
+        if (reducedMotion) {
+            { 0.4f }
+        } else {
+            val dotAngle1 = (2.0 * PI * (0.78 / 0.72)).toFloat()
+            val dotAngle2 = (2.0 * PI * (0.78 / 1.44)).toFloat()
+            {
+                val s = sin(dotAngle1 + primaryPhaseState.value)
+                val c = cos(dotAngle2 - secondaryPhaseState.value)
+                val rawNorm = (s + 0.45f * c) / 1.45f
+                ((1f - rawNorm) * 0.5f).coerceIn(0f, 1f)
+            }
+        }
+    }
+
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .padding(4.dp)
     ) {
+        val glowBlur = maxWidth * 0.045f
+        val canBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+        // 1. Ambient glow behind the card, using the app's live cycle ring colors
+        //    and swelling in sync with the floating wave dot's height.
+        if (cycleColors.isNotEmpty()) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .graphicsLayer {
+                        val b = dotGlowLevel()
+                        val s = lerpFloat(0.97f, 1.045f, b)
+                        scaleX = s
+                        scaleY = s
+                        alpha = lerpFloat(0.12f, 0.85f, b)
+                    }
+                    .then(
+                        if (canBlur) Modifier.blur(glowBlur, BlurredEdgeTreatment.Unbounded)
+                        else Modifier
+                    )
+                    .drawWithCache {
+                        val brush = cycleRingSweepBrush(size, cycleColors)
+                        val r = CornerRadius(28.dp.toPx().coerceAtMost(size.minDimension / 2f))
+                        val spread = glowBlur.toPx()
+                        onDrawBehind {
+                            if (canBlur) {
+                                drawRoundRect(brush = brush, cornerRadius = r)
+                            } else {
+                                // Android 11 and below fallback: fading concentric outlines
+                                val steps = 8
+                                for (i in 0 until steps) {
+                                    val out = spread * i / steps
+                                    val a = (1f - i.toFloat() / steps).let { it * it } * 0.35f
+                                    drawRoundRect(
+                                        brush = brush,
+                                        topLeft = Offset(-out, -out),
+                                        size = Size(size.width + out * 2f, size.height + out * 2f),
+                                        cornerRadius = CornerRadius(r.x + out),
+                                        style = Stroke(width = spread / steps * 2f),
+                                        alpha = a
+                                    )
+                                }
+                                drawRoundRect(brush = brush, cornerRadius = r, alpha = 0.5f)
+                            }
+                        }
+                    }
+            )
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -436,6 +550,8 @@ private fun HomeWidgetPreviewCard(
             FlowingCycleTideOverlay(
                 todayInfo = todayInfo,
                 contentColor = contentColor,
+                primaryPhase = { primaryPhaseState.value },
+                secondaryPhase = { secondaryPhaseState.value },
                 modifier = Modifier.matchParentSize()
             )
             Column(modifier = Modifier.padding(14.dp)) {
@@ -563,6 +679,41 @@ private fun HomeWidgetPreviewCard(
                     cap = StrokeCap.Round
                 )
             }
+
+            // Subtle ring brightness boost synced to the floating wave dot's height
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .drawWithCache {
+                        val strokeWidth = 6.dp.toPx()
+                        val cornerRadius = 28.dp.toPx().coerceAtMost(
+                            (size.minDimension - strokeWidth) / 2f
+                        )
+                        val perimeter = Path()
+                        populateWidgetPerimeterPath(
+                            path = perimeter,
+                            width = size.width,
+                            height = size.height,
+                            strokeWidth = strokeWidth,
+                            cornerRadius = cornerRadius
+                        )
+                        val brush = cycleRingSweepBrush(size, cycleColors)
+                        val stroke = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
+                        onDrawBehind {
+                            val b = dotGlowLevel()
+                            val boostAlpha = lerpFloat(0f, 0.28f, b)
+                            if (boostAlpha > 0.005f) {
+                                drawPath(
+                                    path = perimeter,
+                                    brush = brush,
+                                    alpha = boostAlpha,
+                                    style = stroke,
+                                    blendMode = BlendMode.Plus
+                                )
+                            }
+                        }
+                    }
+            )
 
             // Highlight current cycle day on the outline with a quiet pulsing ripple
             val currentDay = todayInfo.cycleDay
@@ -703,6 +854,8 @@ private fun PulsingDayMarkerOverlay(
 private fun FlowingCycleTideOverlay(
     todayInfo: DayClassification,
     contentColor: Color,
+    primaryPhase: () -> Float,
+    secondaryPhase: () -> Float,
     modifier: Modifier = Modifier
 ) {
     val isPeriod = todayInfo.periodStatus == PeriodStatus.LOGGED_START ||
@@ -717,32 +870,6 @@ private fun FlowingCycleTideOverlay(
         isNotFertile -> 7.dp
         else -> 10.dp
     }
-    val primaryDurationMs = when {
-        isNotFertile -> 6200
-        isFertile -> 3800
-        else -> 4600
-    }
-    val secondaryDurationMs = (primaryDurationMs * 1.9f).toInt()
-
-    val infiniteTransition = rememberInfiniteTransition(label = "cycleTide")
-    val primaryPhase by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = (2.0 * PI).toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = primaryDurationMs, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "primaryWavePhase"
-    )
-    val secondaryPhase by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = (2.0 * PI).toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = secondaryDurationMs, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "secondaryWavePhase"
-    )
 
     val wavePath = remember { Path() }
 
@@ -751,6 +878,8 @@ private fun FlowingCycleTideOverlay(
         val h = size.height
         if (w <= 0f || h <= 0f) return@Canvas
 
+        val p1 = primaryPhase()
+        val p2 = secondaryPhase()
         val amp = ampDp.toPx()
         val freq1 = (2.0 * PI / (w * 0.72f)).toFloat()
         val freq2 = (2.0 * PI / (w * 1.44f)).toFloat()
@@ -758,8 +887,8 @@ private fun FlowingCycleTideOverlay(
 
         fun waveY(x: Float, baseY: Float, layerPhaseOffset: Float): Float {
             return baseY +
-                sin(x * freq1 + primaryPhase + layerPhaseOffset) * amp +
-                cos(x * freq2 - secondaryPhase) * (amp * 0.45f)
+                sin(x * freq1 + p1 + layerPhaseOffset) * amp +
+                cos(x * freq2 - p2) * (amp * 0.45f)
         }
 
         // Two overlapping translucent fluid wave layers
@@ -794,6 +923,46 @@ private fun FlowingCycleTideOverlay(
             radius = 4.dp.toPx(),
             center = Offset(dotX, dotY)
         )
+    }
+}
+
+private fun lerpFloat(a: Float, b: Float, t: Float): Float = a + (b - a) * t
+
+/**
+ * Sweep gradient built from the app's live [cycleColors], starting at 12 o'clock clockwise
+ * with smooth phase transitions and a hard Blue | Red edge at 12 o'clock.
+ */
+private fun cycleRingSweepBrush(size: Size, cycleColors: List<Color>): ShaderBrush {
+    val count = cycleColors.size
+    val samples = (count * 4).coerceAtLeast(32)
+    val colors = IntArray(samples + 1)
+    val stops = FloatArray(samples + 1)
+    for (i in 0..samples) {
+        val frac = i.toFloat() / samples
+        val dayPos = (frac * count).coerceIn(0.01f, count - 0.01f)
+        colors[i] = sampleSmoothCycleColorCompose(cycleColors, dayPos).toArgb()
+        stops[i] = frac
+    }
+    val cx = size.width / 2f
+    val cy = size.height / 2f
+    val shader = android.graphics.SweepGradient(cx, cy, colors, stops).apply {
+        setLocalMatrix(android.graphics.Matrix().apply { setRotate(-90f, cx, cy) })
+    }
+    return object : ShaderBrush() {
+        override fun createShader(size: Size): Shader = shader
+    }
+}
+
+/** True when the user has turned animations off (animator duration scale = 0). */
+@Composable
+private fun rememberReducedMotion(): Boolean {
+    val context = LocalContext.current
+    return remember {
+        Settings.Global.getFloat(
+            context.contentResolver,
+            Settings.Global.ANIMATOR_DURATION_SCALE,
+            1f
+        ) == 0f
     }
 }
 

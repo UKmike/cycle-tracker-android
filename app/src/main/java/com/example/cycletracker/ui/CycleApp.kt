@@ -1,5 +1,11 @@
 package com.example.cycletracker.ui
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -94,6 +100,7 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sin
 
 private val GreenFertile = Color(0xFF059669)
 private val YellowCouldBe = Color(0xFFFBBF24)
@@ -410,6 +417,11 @@ private fun HomeWidgetPreviewCard(
                     shape = RoundedCornerShape(24.dp)
                 )
         ) {
+            FlowingCycleTideOverlay(
+                todayInfo = todayInfo,
+                contentColor = contentColor,
+                modifier = Modifier.matchParentSize()
+            )
             Column(modifier = Modifier.padding(14.dp)) {
                 val displayStatus = if (hasData && todayInfo.daysLate > 0) "Period Late" else statusText
                 Surface(
@@ -587,6 +599,104 @@ private fun HomeWidgetPreviewCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun FlowingCycleTideOverlay(
+    todayInfo: DayClassification,
+    contentColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val isPeriod = todayInfo.periodStatus == PeriodStatus.LOGGED_START ||
+        todayInfo.periodStatus == PeriodStatus.LOGGED ||
+        todayInfo.periodStatus == PeriodStatus.PREDICTED_START ||
+        todayInfo.periodStatus == PeriodStatus.PREDICTED
+    val isFertile = !isPeriod && todayInfo.fertility == FertilityStatus.FERTILE
+    val isNotFertile = !isPeriod && todayInfo.fertility == FertilityStatus.NOT_FERTILE
+
+    val ampDp = when {
+        isFertile -> 14.dp
+        isNotFertile -> 7.dp
+        else -> 10.dp
+    }
+    val primaryDurationMs = when {
+        isNotFertile -> 6200
+        isFertile -> 3800
+        else -> 4600
+    }
+    val secondaryDurationMs = (primaryDurationMs * 1.9f).toInt()
+
+    val infiniteTransition = rememberInfiniteTransition(label = "cycleTide")
+    val primaryPhase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2.0 * PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = primaryDurationMs, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "primaryWavePhase"
+    )
+    val secondaryPhase by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = (2.0 * PI).toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = secondaryDurationMs, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "secondaryWavePhase"
+    )
+
+    val wavePath = remember { Path() }
+
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        if (w <= 0f || h <= 0f) return@Canvas
+
+        val amp = ampDp.toPx()
+        val freq1 = (2.0 * PI / (w * 0.72f)).toFloat()
+        val freq2 = (2.0 * PI / (w * 1.44f)).toFloat()
+        val stepPx = 6.dp.toPx().coerceAtLeast(4f)
+
+        fun waveY(x: Float, baseY: Float, layerPhaseOffset: Float): Float {
+            return baseY +
+                sin(x * freq1 + primaryPhase + layerPhaseOffset) * amp +
+                cos(x * freq2 - secondaryPhase) * (amp * 0.45f)
+        }
+
+        // Two overlapping translucent fluid wave layers
+        val layers = listOf(
+            Triple(h * 0.64f, 0f, 0.14f),
+            Triple(h * 0.75f, 1.8f, 0.10f)
+        )
+        for ((baseY, phaseOffset, alpha) in layers) {
+            wavePath.reset()
+            wavePath.moveTo(0f, h)
+            var x = 0f
+            while (x < w) {
+                wavePath.lineTo(x, waveY(x, baseY, phaseOffset))
+                x += stepPx
+            }
+            wavePath.lineTo(w, waveY(w, baseY, phaseOffset))
+            wavePath.lineTo(w, h)
+            wavePath.close()
+            drawPath(path = wavePath, color = contentColor.copy(alpha = alpha))
+        }
+
+        // Glowing crest dot riding the top wave on the open right side
+        val dotX = w * 0.78f
+        val dotY = waveY(dotX, h * 0.64f, 0f)
+        drawCircle(
+            color = contentColor.copy(alpha = 0.28f),
+            radius = 9.dp.toPx(),
+            center = Offset(dotX, dotY)
+        )
+        drawCircle(
+            color = contentColor.copy(alpha = 0.75f),
+            radius = 4.dp.toPx(),
+            center = Offset(dotX, dotY)
+        )
     }
 }
 

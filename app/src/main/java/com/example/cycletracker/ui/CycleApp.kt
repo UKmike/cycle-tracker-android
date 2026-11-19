@@ -480,12 +480,12 @@ private fun HomeWidgetPreviewCard(
             .fillMaxWidth()
             .padding(4.dp)
     ) {
-        val glowBlur = maxWidth * 0.045f
+        val glowBlur = (maxWidth * 0.03f).coerceAtMost(11.dp)
 
         // 1. Ambient glow behind the card, using the app's live cycle ring colors
         //    and swelling in sync with the floating wave dot's height.
         //    Uses BlurMaskFilter without a RenderEffect layer so the glow fades
-        //    smoothly past all four edges with no rectangular clipping.
+        //    smoothly past all four edges and finishes before the screen edge.
         if (cycleColors.isNotEmpty()) {
             Box(
                 modifier = Modifier
@@ -493,6 +493,7 @@ private fun HomeWidgetPreviewCard(
                     .drawWithCache {
                         val blurPx = glowBlur.toPx().coerceAtLeast(1f)
                         val r = 28.dp.toPx().coerceAtMost(size.minDimension / 2f)
+                        val hInset = 2.dp.toPx()
                         val shader = cycleRingSweepShader(size, cycleColors)
                         val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
                             style = android.graphics.Paint.Style.FILL
@@ -501,15 +502,15 @@ private fun HomeWidgetPreviewCard(
                         }
                         onDrawBehind {
                             val b = dotGlowLevel()
-                            val s = lerpFloat(0.97f, 1.045f, b)
-                            val a = lerpFloat(0.12f, 0.85f, b)
+                            val s = lerpFloat(0.96f, 1.015f, b)
+                            val a = lerpFloat(0.12f, 0.78f, b)
                             paint.alpha = (a * 255f).toInt().coerceIn(0, 255)
                             scale(scaleX = s, scaleY = s, pivot = center) {
                                 drawIntoCanvas { canvas ->
                                     canvas.nativeCanvas.drawRoundRect(
+                                        hInset,
                                         0f,
-                                        0f,
-                                        size.width,
+                                        size.width - hInset,
                                         size.height,
                                         r,
                                         r,

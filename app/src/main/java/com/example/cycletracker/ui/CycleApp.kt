@@ -498,45 +498,18 @@ private fun HomeWidgetPreviewCard(
                 val cornerRadius = 28.dp.toPx().coerceAtMost(
                     (size.minDimension - strokeWidth) / 2f
                 )
-                val left = inset
                 val top = inset
-                val right = size.width - inset
-                val bottom = size.height - inset
                 val midX = size.width / 2f
 
                 // Build rounded-rectangle perimeter starting at top-center (period start) clockwise
-                val perimeter = Path().apply {
-                    moveTo(midX, top)
-                    lineTo(right - cornerRadius, top)
-                    arcTo(
-                        rect = Rect(right - 2 * cornerRadius, top, right, top + 2 * cornerRadius),
-                        startAngleDegrees = -90f,
-                        sweepAngleDegrees = 90f,
-                        forceMoveTo = false
-                    )
-                    lineTo(right, bottom - cornerRadius)
-                    arcTo(
-                        rect = Rect(right - 2 * cornerRadius, bottom - 2 * cornerRadius, right, bottom),
-                        startAngleDegrees = 0f,
-                        sweepAngleDegrees = 90f,
-                        forceMoveTo = false
-                    )
-                    lineTo(left + cornerRadius, bottom)
-                    arcTo(
-                        rect = Rect(left, bottom - 2 * cornerRadius, left + 2 * cornerRadius, bottom),
-                        startAngleDegrees = 90f,
-                        sweepAngleDegrees = 90f,
-                        forceMoveTo = false
-                    )
-                    lineTo(left, top + cornerRadius)
-                    arcTo(
-                        rect = Rect(left, top, left + 2 * cornerRadius, top + 2 * cornerRadius),
-                        startAngleDegrees = 180f,
-                        sweepAngleDegrees = 90f,
-                        forceMoveTo = false
-                    )
-                    lineTo(midX, top)
-                }
+                val perimeter = Path()
+                populateWidgetPerimeterPath(
+                    path = perimeter,
+                    width = size.width,
+                    height = size.height,
+                    strokeWidth = strokeWidth,
+                    cornerRadius = cornerRadius
+                )
 
                 val pathMeasure = PathMeasure()
                 pathMeasure.setPath(perimeter, forceClosed = false)
@@ -573,32 +546,140 @@ private fun HomeWidgetPreviewCard(
                     strokeWidth = 2.dp.toPx(),
                     cap = StrokeCap.Round
                 )
+            }
 
-                // Highlight current cycle day on the outline (opaque halo + deep solid dot)
-                val currentDay = todayInfo.cycleDay
-                if (currentDay != null) {
-                    val clampedIndex = ((currentDay - 1) % count + count) % count
-                    val midDist = totalLength * (clampedIndex + 0.5f) / count
-                    val markerPos = pathMeasure.getPosition(midDist)
-                    val (haloColor, dotColor) = when (cycleColors[clampedIndex]) {
-                        RedPeriod -> Color(0xFFFCA5A5) to Color(0xFFB91C1C)
-                        GreenFertile -> Color(0xFF6EE7B7) to Color(0xFF047857)
-                        YellowCouldBe -> Color(0xFFFEF08A) to Color(0xFFD97706)
-                        else -> Color(0xFFBAE6FD) to Color(0xFF0284C7)
-                    }
-                    drawCircle(
-                        color = haloColor,
-                        radius = 9.5.dp.toPx(),
-                        center = markerPos
-                    )
-                    drawCircle(
-                        color = dotColor,
-                        radius = 6.dp.toPx(),
-                        center = markerPos
-                    )
-                }
+            // Highlight current cycle day on the outline with a quiet pulsing ripple
+            val currentDay = todayInfo.cycleDay
+            if (currentDay != null) {
+                val count = cycleColors.size
+                val clampedIndex = ((currentDay - 1) % count + count) % count
+                PulsingDayMarkerOverlay(
+                    dayFraction = (clampedIndex + 0.5f) / count,
+                    phaseColor = cycleColors[clampedIndex],
+                    modifier = Modifier.matchParentSize()
+                )
             }
         }
+    }
+}
+
+private fun populateWidgetPerimeterPath(
+    path: Path,
+    width: Float,
+    height: Float,
+    strokeWidth: Float,
+    cornerRadius: Float
+) {
+    val inset = strokeWidth / 2f
+    val left = inset
+    val top = inset
+    val right = width - inset
+    val bottom = height - inset
+    val midX = width / 2f
+
+    path.reset()
+    path.moveTo(midX, top)
+    path.lineTo(right - cornerRadius, top)
+    path.arcTo(
+        rect = Rect(right - 2 * cornerRadius, top, right, top + 2 * cornerRadius),
+        startAngleDegrees = -90f,
+        sweepAngleDegrees = 90f,
+        forceMoveTo = false
+    )
+    path.lineTo(right, bottom - cornerRadius)
+    path.arcTo(
+        rect = Rect(right - 2 * cornerRadius, bottom - 2 * cornerRadius, right, bottom),
+        startAngleDegrees = 0f,
+        sweepAngleDegrees = 90f,
+        forceMoveTo = false
+    )
+    path.lineTo(left + cornerRadius, bottom)
+    path.arcTo(
+        rect = Rect(left, bottom - 2 * cornerRadius, left + 2 * cornerRadius, bottom),
+        startAngleDegrees = 90f,
+        sweepAngleDegrees = 90f,
+        forceMoveTo = false
+    )
+    path.lineTo(left, top + cornerRadius)
+    path.arcTo(
+        rect = Rect(left, top, left + 2 * cornerRadius, top + 2 * cornerRadius),
+        startAngleDegrees = 180f,
+        sweepAngleDegrees = 90f,
+        forceMoveTo = false
+    )
+    path.lineTo(midX, top)
+}
+
+@Composable
+private fun PulsingDayMarkerOverlay(
+    dayFraction: Float,
+    phaseColor: Color,
+    modifier: Modifier = Modifier
+) {
+    val (haloColor, dotColor) = when (phaseColor) {
+        RedPeriod -> Color(0xFFFCA5A5) to Color(0xFFB91C1C)
+        GreenFertile -> Color(0xFF6EE7B7) to Color(0xFF047857)
+        YellowCouldBe -> Color(0xFFFEF08A) to Color(0xFFD97706)
+        else -> Color(0xFFBAE6FD) to Color(0xFF0284C7)
+    }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "markerPulse")
+    val pulseProgress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2600, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "pulseProgress"
+    )
+
+    val perimeterPath = remember { Path() }
+    val pathMeasure = remember { PathMeasure() }
+
+    Canvas(modifier = modifier) {
+        val strokeWidth = 6.dp.toPx()
+        val cornerRadius = 28.dp.toPx().coerceAtMost(
+            (size.minDimension - strokeWidth) / 2f
+        )
+        populateWidgetPerimeterPath(
+            path = perimeterPath,
+            width = size.width,
+            height = size.height,
+            strokeWidth = strokeWidth,
+            cornerRadius = cornerRadius
+        )
+        pathMeasure.setPath(perimeterPath, forceClosed = false)
+        val markerPos = pathMeasure.getPosition(pathMeasure.length * dayFraction)
+
+        val haloRadius = 9.5.dp.toPx()
+
+        // Soft expanding "you are here" ripple during the first 72% of the cycle,
+        // leaving a brief calm pause before the next ripple begins.
+        if (pulseProgress < 0.72f) {
+            val prog = pulseProgress / 0.72f
+            val eased = 1f - (1f - prog) * (1f - prog) * (1f - prog)
+            val rippleRadius = haloRadius + eased * 13.dp.toPx()
+            val rippleAlpha = (1f - prog) * 0.75f
+            val rippleStroke = (2.2f * (1f - prog * 0.4f)).dp.toPx()
+            drawCircle(
+                color = haloColor.copy(alpha = rippleAlpha),
+                radius = rippleRadius,
+                center = markerPos,
+                style = Stroke(width = rippleStroke)
+            )
+        }
+
+        drawCircle(
+            color = haloColor,
+            radius = haloRadius,
+            center = markerPos
+        )
+        drawCircle(
+            color = dotColor,
+            radius = 6.dp.toPx(),
+            center = markerPos
+        )
     }
 }
 

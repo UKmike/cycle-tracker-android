@@ -55,6 +55,7 @@ import android.os.Handler
 import android.os.Looper
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -81,6 +82,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
@@ -117,6 +119,9 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
     Scaffold(
         topBar = {
             TopAppBar(
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent
+                ),
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         MayaLogo(modifier = Modifier.size(32.dp))
@@ -178,7 +183,8 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
                     todayInfo = state.todayClassification,
                     hasData = state.model.hasData,
                     periodStarts = state.periodStarts,
-                    model = state.model
+                    model = state.model,
+                    modifier = Modifier.zIndex(1f)
                 )
 
                 // 2. Merged Interactive Calendar + Selected Day Section (fills remaining height)
@@ -331,7 +337,8 @@ private fun HomeWidgetPreviewCard(
     todayInfo: DayClassification,
     hasData: Boolean,
     periodStarts: List<LocalDate>,
-    model: CycleModel
+    model: CycleModel,
+    modifier: Modifier = Modifier
 ) {
     val gradColors: List<Color>
     val contentColor: Color
@@ -391,7 +398,7 @@ private fun HomeWidgetPreviewCard(
     val ringBackingColor = MaterialTheme.colorScheme.surface
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(4.dp)
     ) {

@@ -457,18 +457,19 @@ private fun HomeWidgetPreviewCard(
     // 1f when the dot is at its highest point on screen, 0f when at its lowest.
     // Read only inside graphicsLayer / draw lambdas so animation frames don't trigger recomposition.
     val dotGlowLevel: () -> Float = remember(reducedMotion, primaryPhaseState, secondaryPhaseState) {
-        if (reducedMotion) {
+        val dotAngle1 = (2.0 * PI * (0.78 / 0.72)).toFloat()
+        val dotAngle2 = (2.0 * PI * (0.78 / 1.44)).toFloat()
+        val provider: () -> Float = if (reducedMotion) {
             { 0.4f }
         } else {
-            val dotAngle1 = (2.0 * PI * (0.78 / 0.72)).toFloat()
-            val dotAngle2 = (2.0 * PI * (0.78 / 1.44)).toFloat()
             {
-                val s = sin(dotAngle1 + primaryPhaseState.value)
-                val c = cos(dotAngle2 - secondaryPhaseState.value)
+                val s = sin((dotAngle1 + primaryPhaseState.value).toDouble()).toFloat()
+                val c = cos((dotAngle2 - secondaryPhaseState.value).toDouble()).toFloat()
                 val rawNorm = (s + 0.45f * c) / 1.45f
                 ((1f - rawNorm) * 0.5f).coerceIn(0f, 1f)
             }
         }
+        provider
     }
 
     BoxWithConstraints(

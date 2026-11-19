@@ -51,6 +51,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import android.app.WallpaperManager
 import android.content.Context
+import android.graphics.BlurMaskFilter
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -61,7 +62,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,11 +70,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.BlurredEdgeTreatment
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -89,15 +86,21 @@ import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -478,48 +481,41 @@ private fun HomeWidgetPreviewCard(
             .padding(4.dp)
     ) {
         val glowBlur = maxWidth * 0.045f
-        val canBlur = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
         // 1. Ambient glow behind the card, using the app's live cycle ring colors
         //    and swelling in sync with the floating wave dot's height.
+        //    Uses BlurMaskFilter without a RenderEffect layer so the glow fades
+        //    smoothly past all four edges with no rectangular clipping.
         if (cycleColors.isNotEmpty()) {
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .graphicsLayer {
-                        val b = dotGlowLevel()
-                        val s = lerpFloat(0.97f, 1.045f, b)
-                        scaleX = s
-                        scaleY = s
-                        alpha = lerpFloat(0.12f, 0.85f, b)
-                    }
-                    .then(
-                        if (canBlur) Modifier.blur(glowBlur, BlurredEdgeTreatment.Unbounded)
-                        else Modifier
-                    )
                     .drawWithCache {
-                        val brush = cycleRingSweepBrush(size, cycleColors)
-                        val r = CornerRadius(28.dp.toPx().coerceAtMost(size.minDimension / 2f))
-                        val spread = glowBlur.toPx()
+                        val blurPx = glowBlur.toPx().coerceAtLeast(1f)
+                        val r = 28.dp.toPx().coerceAtMost(size.minDimension / 2f)
+                        val shader = cycleRingSweepShader(size, cycleColors)
+                        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                            style = android.graphics.Paint.Style.FILL
+                            this.shader = shader
+                            maskFilter = BlurMaskFilter(blurPx, BlurMaskFilter.Blur.NORMAL)
+                        }
                         onDrawBehind {
-                            if (canBlur) {
-                                drawRoundRect(brush = brush, cornerRadius = r)
-                            } else {
-                                // Android 11 and below fallback: fading concentric outlines
-                                val steps = 8
-                                for (i in 0 until steps) {
-                                    val out = spread * i / steps
-                                    val a = (1f - i.toFloat() / steps).let { it * it } * 0.35f
-                                    drawRoundRect(
-                                        brush = brush,
-                                        topLeft = Offset(-out, -out),
-                                        size = Size(size.width + out * 2f, size.height + out * 2f),
-                                        cornerRadius = CornerRadius(r.x + out),
-                                        style = Stroke(width = spread / steps * 2f),
-                                        alpha = a
+                            val b = dotGlowLevel()
+                            val s = lerpFloat(0.97f, 1.045f, b)
+                            val a = lerpFloat(0.12f, 0.85f, b)
+                            paint.alpha = (a * 255f).toInt().coerceIn(0, 255)
+                            scale(scaleX = s, scaleY = s, pivot = center) {
+                                drawIntoCanvas { canvas ->
+                                    canvas.nativeCanvas.drawRoundRect(
+                                        0f,
+                                        0f,
+                                        size.width,
+                                        size.height,
+                                        r,
+                                        r,
+                                        paint
                                     )
                                 }
-                                drawRoundRect(brush = brush, cornerRadius = r, alpha = 0.5f)
                             }
                         }
                     }
@@ -933,7 +929,7 @@ private fun lerpFloat(a: Float, b: Float, t: Float): Float = a + (b - a) * t
  * Sweep gradient built from the app's live [cycleColors], starting at 12 o'clock clockwise
  * with smooth phase transitions and a hard Blue | Red edge at 12 o'clock.
  */
-private fun cycleRingSweepBrush(size: Size, cycleColors: List<Color>): ShaderBrush {
+private fun cycleRingSweepShader(size: Size, cycleColors: List<Color>): Shader {
     val count = cycleColors.size
     val samples = (count * 4).coerceAtLeast(32)
     val colors = IntArray(samples + 1)
@@ -946,9 +942,13 @@ private fun cycleRingSweepBrush(size: Size, cycleColors: List<Color>): ShaderBru
     }
     val cx = size.width / 2f
     val cy = size.height / 2f
-    val shader = android.graphics.SweepGradient(cx, cy, colors, stops).apply {
+    return android.graphics.SweepGradient(cx, cy, colors, stops).apply {
         setLocalMatrix(android.graphics.Matrix().apply { setRotate(-90f, cx, cy) })
     }
+}
+
+private fun cycleRingSweepBrush(size: Size, cycleColors: List<Color>): ShaderBrush {
+    val shader = cycleRingSweepShader(size, cycleColors)
     return object : ShaderBrush() {
         override fun createShader(size: Size): Shader = shader
     }
@@ -1720,10 +1720,28 @@ private fun HistoryCard(
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
+                // Absorb leftover vertical scroll/fling so scrolling the history list
+                // never leaks into ModalBottomSheet and makes the sheet shake.
+                val blockSheetNestedScroll = remember {
+                    object : NestedScrollConnection {
+                        override fun onPostScroll(
+                            consumed: Offset,
+                            available: Offset,
+                            source: NestedScrollSource
+                        ): Offset = Offset(0f, available.y)
+
+                        override suspend fun onPostFling(
+                            consumed: Velocity,
+                            available: Velocity
+                        ): Velocity = Velocity(0f, available.y)
+                    }
+                }
+
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
+                        .nestedScroll(blockSheetNestedScroll)
                 ) {
                     itemsIndexed(
                         items = sortedDesc,

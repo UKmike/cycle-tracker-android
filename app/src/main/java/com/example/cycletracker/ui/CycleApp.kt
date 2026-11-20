@@ -1,5 +1,8 @@
 package com.example.cycletracker.ui
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -11,6 +14,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -113,6 +117,7 @@ import com.example.cycletracker.domain.CycleModel
 import com.example.cycletracker.domain.DayClassification
 import com.example.cycletracker.domain.FertilityStatus
 import com.example.cycletracker.domain.PeriodStatus
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.YearMonth
@@ -596,10 +601,15 @@ private fun HomeWidgetPreviewCard(
         label = "secondaryWavePhase"
     )
 
+    val jumpScope = rememberCoroutineScope()
+    val jumpOffsetFraction = remember { Animatable(0f) }
+    val landingSplash = remember { Animatable(0f) }
+    var jumpJob by remember { mutableStateOf<Job?>(null) }
+
     // Normalized height [0f..1f] of the floating wave crest dot at x = 0.78 * width:
-    // 1f when the dot is at its highest point on screen, 0f when at its lowest.
-    // Read only inside graphicsLayer / draw lambdas so animation frames don't trigger recomposition.
-    val dotGlowLevel: () -> Float = remember(reducedMotion, primaryPhaseState, secondaryPhaseState) {
+    // 1f when the dot is at its highest point on screen (including during a jump), 0f at its lowest.
+    // Read only inside draw lambdas so animation frames don't trigger recomposition.
+    val dotGlowLevel: () -> Float = remember(reducedMotion, primaryPhaseState, secondaryPhaseState, jumpOffsetFraction) {
         val dotAngle1 = (2.0 * PI * (0.78 / 0.72)).toFloat()
         val dotAngle2 = (2.0 * PI * (0.78 / 1.44)).toFloat()
         val provider: () -> Float = if (reducedMotion) {
@@ -609,7 +619,8 @@ private fun HomeWidgetPreviewCard(
                 val s = sin((dotAngle1 + primaryPhaseState.value).toDouble()).toFloat()
                 val c = cos((dotAngle2 - secondaryPhaseState.value).toDouble()).toFloat()
                 val rawNorm = (s + 0.45f * c) / 1.45f
-                ((1f - rawNorm) * 0.5f).coerceIn(0f, 1f)
+                val waveHeight = ((1f - rawNorm) * 0.5f).coerceIn(0f, 1f)
+                (waveHeight + jumpOffsetFraction.value * 0.65f).coerceIn(0f, 1f)
             }
         }
         provider
@@ -619,6 +630,42 @@ private fun HomeWidgetPreviewCard(
         modifier = modifier
             .fillMaxWidth()
             .padding(4.dp)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                if (reducedMotion) return@clickable
+                jumpJob?.cancel()
+                jumpJob = jumpScope.launch {
+                    landingSplash.snapTo(0f)
+                    // Alto's Adventure ballistic launch: fast takeoff decelerating into hang-time at apex
+                    jumpOffsetFraction.animateTo(
+                        targetValue = 1f,
+                        animationSpec = tween(
+                            durationMillis = 320,
+                            easing = FastOutSlowInEasing
+                        )
+                    )
+                    // Gravity-accelerated descent back onto the moving wave
+                    jumpOffsetFraction.animateTo(
+                        targetValue = 0f,
+                        animationSpec = tween(
+                            durationMillis = 340,
+                            easing = CubicBezierEasing(0.32f, 0f, 0.85f, 0.36f)
+                        )
+                    )
+                    // Soft wave splash ripple on touchdown
+                    landingSplash.snapTo(0.01f)
+                    landingSplash.animateTo(
+                        targetValue = 1f,
+                        animationSpec = tween(
+                            durationMillis = 420,
+                            easing = FastOutSlowInEasing
+                        )
+                    )
+                    landingSplash.snapTo(0f)
+                }
+            }
     ) {
         val glowBlur = (maxWidth * 0.038f).coerceAtMost(14.dp)
 
@@ -690,6 +737,8 @@ private fun HomeWidgetPreviewCard(
                 contentColor = contentColor,
                 primaryPhase = { primaryPhaseState.value },
                 secondaryPhase = { secondaryPhaseState.value },
+                jumpHeightFraction = { jumpOffsetFraction.value },
+                landingSplash = { landingSplash.value },
                 modifier = Modifier.matchParentSize()
             )
             Column(modifier = Modifier.padding(14.dp)) {
@@ -1004,6 +1053,8 @@ private fun FlowingCycleTideOverlay(
     contentColor: Color,
     primaryPhase: () -> Float,
     secondaryPhase: () -> Float,
+    jumpHeightFraction: () -> Float,
+    landingSplash: () -> Float,
     modifier: Modifier = Modifier
 ) {
     val isPeriod = todayInfo.periodStatus == PeriodStatus.LOGGED_START ||
@@ -1058,16 +1109,45 @@ private fun FlowingCycleTideOverlay(
             drawPath(path = wavePath, color = contentColor.copy(alpha = alpha))
         }
 
-        // Glowing crest dot riding the top wave on the open right side
+        // Glowing crest dot riding the top wave (launches into a parabolic jump when tapped)
         val dotX = w * 0.78f
-        val dotY = waveY(dotX, h * 0.64f, 0f)
+        val waveSurfaceY = waveY(dotX, h * 0.64f, 0f)
+        val maxJumpPx = (waveSurfaceY - 14.dp.toPx()).coerceIn(24.dp.toPx(), 54.dp.toPx())
+        val j = jumpHeightFraction().coerceIn(0f, 1f)
+        val dotY = waveSurfaceY - j * maxJumpPx
+
+        // Soft splash ripple on the wave surface upon landing
+        val splash = landingSplash()
+        if (splash > 0.01f && splash < 0.99f) {
+            drawCircle(
+                color = contentColor.copy(alpha = (1f - splash) * 0.55f),
+                radius = (6f + splash * 14f).dp.toPx(),
+                center = Offset(dotX, waveSurfaceY),
+                style = Stroke(width = (1.8f * (1f - splash * 0.5f)).dp.toPx())
+            )
+        }
+
+        // Subtle Alto-style flowing scarf/comet trail while airborne
+        if (j > 0.02f) {
+            for (i in 1..3) {
+                val frac = i / 3f
+                val trailX = dotX - (i * 5.5f * j).dp.toPx()
+                val trailY = dotY + (i * 4.5f * j).dp.toPx()
+                drawCircle(
+                    color = contentColor.copy(alpha = (0.36f * (1f - frac * 0.7f)) * j),
+                    radius = (3.4f - i * 0.7f).dp.toPx(),
+                    center = Offset(trailX, trailY)
+                )
+            }
+        }
+
         drawCircle(
-            color = contentColor.copy(alpha = 0.28f),
-            radius = 9.dp.toPx(),
+            color = contentColor.copy(alpha = lerpFloat(0.28f, 0.44f, j)),
+            radius = lerpFloat(9f, 11.5f, j).dp.toPx(),
             center = Offset(dotX, dotY)
         )
         drawCircle(
-            color = contentColor.copy(alpha = 0.75f),
+            color = contentColor.copy(alpha = lerpFloat(0.75f, 0.95f, j)),
             radius = 4.dp.toPx(),
             center = Offset(dotX, dotY)
         )

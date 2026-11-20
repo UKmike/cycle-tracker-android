@@ -439,26 +439,24 @@ private fun HistoryScreen(
                     .padding(start = 16.dp, end = 16.dp, top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // Left half: Cycle Length Graph filling available height
+                // Left half: Cycle Length Graph extending full height in line with HistoryCard
                 CycleLengthGraphCard(
                     periodStarts = periodStarts,
                     model = model,
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxHeight()
-                        .navigationBarsPadding()
-                        .padding(bottom = 10.dp),
+                        .fillMaxHeight(),
                     fillHeight = true
                 )
 
-                // Right half: Cycle Insights + scrollable Period History extending behind home bar
+                // Right half: Compact Cycle Insights + scrollable Period History extending behind home bar
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    InsightsCard(model = model)
+                    InsightsCard(model = model, compact = true)
                     HistoryCard(
                         periodStarts = periodStarts,
                         onRemove = onRemove,
@@ -1813,7 +1811,7 @@ private fun CycleLengthGraphCard(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(
-            modifier = (if (fillHeight) Modifier.fillMaxSize() else Modifier.fillMaxWidth())
+            modifier = (if (fillHeight) Modifier.fillMaxSize().navigationBarsPadding() else Modifier.fillMaxWidth())
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -2009,48 +2007,76 @@ private fun CycleLengthGraphCard(
 }
 
 @Composable
-private fun InsightsCard(model: CycleModel) {
+private fun InsightsCard(model: CycleModel, compact: Boolean = false) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            modifier = Modifier.padding(
+                horizontal = if (compact) 12.dp else 16.dp,
+                vertical = if (compact) 7.dp else 12.dp
+            ),
+            verticalArrangement = Arrangement.spacedBy(if (compact) 5.dp else 8.dp)
+        ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Cycle Insights", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    text = "Cycle Insights",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontSize = if (compact) 12.sp else 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
                 Text(
                     text = if (model.cyclesUsed == 0) "Default (28d)" else "Adapted (${model.cyclesUsed} cycles)",
-                    fontSize = 11.sp,
+                    fontSize = if (compact) 10.sp else 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatTile("Avg Cycle", "${model.averageCycleLength}d", Modifier.weight(1f))
-                StatTile("Variation", "±${model.variabilityDays}d", Modifier.weight(1f))
-                StatTile("Ovulation", "Day ${model.ovulationDay}", Modifier.weight(1f))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 8.dp)
+            ) {
+                StatTile("Avg Cycle", "${model.averageCycleLength}d", Modifier.weight(1f), compact)
+                StatTile("Variation", "±${model.variabilityDays}d", Modifier.weight(1f), compact)
+                StatTile("Ovulation", "Day ${model.ovulationDay}", Modifier.weight(1f), compact)
             }
         }
     }
 }
 
 @Composable
-private fun StatTile(label: String, value: String, modifier: Modifier = Modifier) {
+private fun StatTile(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    compact: Boolean = false
+) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(if (compact) 10.dp else 14.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
     ) {
-        Column(modifier = Modifier.padding(horizontal = 11.dp, vertical = 10.dp)) {
-            Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(
+            modifier = Modifier.padding(
+                horizontal = if (compact) 9.dp else 11.dp,
+                vertical = if (compact) 5.dp else 10.dp
+            )
+        ) {
+            Text(
+                text = label,
+                fontSize = if (compact) 10.sp else 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Text(
                 text = value,
                 style = TextStyle(
-                    fontSize = 18.sp,
+                    fontSize = if (compact) 15.sp else 18.sp,
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = (-0.03).em,
                     fontFeatureSettings = "tnum"

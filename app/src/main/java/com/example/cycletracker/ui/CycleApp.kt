@@ -157,119 +157,202 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent
-                ),
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        MayaLogo(modifier = Modifier.size(32.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "Maya",
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                },
-                actions = {
-                    if (state.periodStarts.isEmpty()) {
-                        TextButton(onClick = { viewModel.loadSampleHistory() }) {
-                            Text("Sample")
+            if (!isLandscape) {
+                TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent
+                    ),
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            MayaLogo(modifier = Modifier.size(32.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "Maya",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    },
+                    actions = {
+                        if (state.periodStarts.isEmpty()) {
+                            TextButton(onClick = { viewModel.loadSampleHistory() }) {
+                                Text("Sample")
+                            }
+                        }
+                        IconButton(onClick = { showHistoryPage = true }) {
+                            Icon(
+                                imageVector = Icons.Default.History,
+                                contentDescription = "Cycle Insights & History"
+                            )
                         }
                     }
-                    IconButton(onClick = { showHistoryPage = true }) {
-                        Icon(
-                            imageVector = Icons.Default.History,
-                            contentDescription = "Cycle Insights & History"
-                        )
-                    }
-                }
-            )
+                )
+            }
         },
         floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { viewModel.togglePeriodStart(state.selectedDate) },
-                containerColor = if (isSelectedLogged) GreenFertile else RedPeriod,
-                contentColor = Color.White,
-                icon = {
-                    Icon(
-                        imageVector = if (isSelectedLogged) Icons.Default.Check else Icons.Default.Add,
-                        contentDescription = null
-                    )
-                },
-                text = {
-                    Text(
-                        text = if (isSelectedLogged) "Remove Period" else "Log Period",
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            )
+            if (!isLandscape) {
+                ExtendedFloatingActionButton(
+                    onClick = { viewModel.togglePeriodStart(state.selectedDate) },
+                    containerColor = if (isSelectedLogged) GreenFertile else RedPeriod,
+                    contentColor = Color.White,
+                    icon = {
+                        Icon(
+                            imageVector = if (isSelectedLogged) Icons.Default.Check else Icons.Default.Add,
+                            contentDescription = null
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = if (isSelectedLogged) "Remove Period" else "Log Period",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                )
+            }
         }
     ) { innerPadding ->
         if (isLandscape) {
+            val today = LocalDate.now()
+            val selectedInfo = CycleCalculator.classifyDate(state.selectedDate, state.periodStarts, state.model)
+            val selectedDateFmt = remember { DateTimeFormatter.ofPattern("EEE, MMM d") }
+
             Row(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // Left half: Live Home Screen Widget Preview
-                Box(
+                // Left half: Compact header + Live Widget + Selected Day & Log Period + Legend
+                Column(
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .zIndex(1f),
-                    contentAlignment = Alignment.Center
+                        .weight(0.46f)
+                        .fillMaxHeight(),
+                    verticalArrangement = Arrangement.SpaceBetween
                 ) {
+                    // Compact header row (frees full vertical height for the calendar on the right)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            MayaLogo(modifier = Modifier.size(26.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                text = "Maya",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (state.periodStarts.isEmpty()) {
+                                TextButton(onClick = { viewModel.loadSampleHistory() }) {
+                                    Text("Sample", fontSize = 12.sp)
+                                }
+                            }
+                            IconButton(
+                                onClick = { showHistoryPage = true },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.History,
+                                    contentDescription = "Cycle Insights & History",
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Live Home Screen Widget Preview
                     HomeWidgetPreviewCard(
                         todayInfo = state.todayClassification,
                         hasData = state.model.hasData,
                         periodStarts = state.periodStarts,
-                        model = state.model
-                    )
-                }
-
-                // Right half: Calendar + Selected Day + 2x2 Key (aligned with FAB)
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                ) {
-                    CalendarCard(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(bottom = 72.dp),
-                        selectedDate = state.selectedDate,
-                        periodStarts = state.periodStarts,
                         model = state.model,
-                        onToday = viewModel::goToToday,
-                        onSelectDate = viewModel::selectDate
+                        modifier = Modifier.zIndex(1f)
                     )
 
+                    // Bottom controls: Selected Day + Log Period action + single-row Legend
                     Column(
                         modifier = Modifier
-                            .align(Alignment.BottomStart)
                             .fillMaxWidth()
-                            .padding(start = 12.dp, end = 156.dp, bottom = 6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                            .padding(horizontal = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            LegendItem(GreenFertile, "Fertile", Modifier.weight(1f))
-                            LegendItem(YellowCouldBe, "Could be", Modifier.weight(1f))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = state.selectedDate.format(selectedDateFmt),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = formatSelectedDayStatus(
+                                        selectedDate = state.selectedDate,
+                                        today = today,
+                                        selectedInfo = selectedInfo,
+                                        model = state.model
+                                    ),
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Surface(
+                                onClick = { viewModel.togglePeriodStart(state.selectedDate) },
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (isSelectedLogged) GreenFertile else RedPeriod,
+                                contentColor = Color.White
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (isSelectedLogged) Icons.Default.Check else Icons.Default.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = if (isSelectedLogged) "Remove" else "Log Period",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
                         }
+
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            LegendItem(BlueNotFertile, "Not fertile", Modifier.weight(1f))
-                            LegendItem(RedPeriod, "Period", Modifier.weight(1f))
+                            LegendItem(GreenFertile, "Fertile")
+                            LegendItem(YellowCouldBe, "Could be")
+                            LegendItem(BlueNotFertile, "Not fertile")
+                            LegendItem(RedPeriod, "Period")
                         }
                     }
                 }
+
+                // Right half: Full-height interactive calendar showing the entire month cleanly
+                CalendarCard(
+                    modifier = Modifier
+                        .weight(0.54f)
+                        .fillMaxHeight(),
+                    selectedDate = state.selectedDate,
+                    periodStarts = state.periodStarts,
+                    model = state.model,
+                    onToday = viewModel::goToToday,
+                    onSelectDate = viewModel::selectDate,
+                    isCompactLandscape = true
+                )
             }
         } else {
             Box(
@@ -1239,7 +1322,8 @@ private fun CalendarCard(
     periodStarts: List<LocalDate>,
     model: CycleModel,
     onToday: () -> Unit,
-    onSelectDate: (LocalDate) -> Unit
+    onSelectDate: (LocalDate) -> Unit,
+    isCompactLandscape: Boolean = false
 ) {
     val today = LocalDate.now()
     val currentMonth = remember { YearMonth.from(today) }
@@ -1263,7 +1347,10 @@ private fun CalendarCard(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 14.dp, vertical = 10.dp)
+                .padding(
+                    horizontal = if (isCompactLandscape) 12.dp else 14.dp,
+                    vertical = if (isCompactLandscape) 8.dp else 10.dp
+                )
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1288,7 +1375,7 @@ private fun CalendarCard(
                     color = todayButtonBg
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 11.dp, vertical = 5.dp),
+                        modifier = Modifier.padding(horizontal = 11.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
@@ -1321,7 +1408,7 @@ private fun CalendarCard(
                 }
             }
 
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(if (isCompactLandscape) 2.dp else 4.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
 
             LazyColumn(
@@ -1329,7 +1416,7 @@ private fun CalendarCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(if (isCompactLandscape) 6.dp else 10.dp)
             ) {
                 items(
                     items = months,
@@ -1342,53 +1429,67 @@ private fun CalendarCard(
                         selectedDate = selectedDate,
                         periodStarts = periodStarts,
                         model = model,
-                        onSelectDate = onSelectDate
+                        onSelectDate = onSelectDate,
+                        isCompactLandscape = isCompactLandscape
                     )
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(if (isCompactLandscape) 4.dp else 8.dp))
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
                     )
                 }
             }
 
-            Spacer(Modifier.height(8.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-            Spacer(Modifier.height(8.dp))
+            if (!isCompactLandscape) {
+                Spacer(Modifier.height(8.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                Spacer(Modifier.height(8.dp))
 
-            // Merged Selected Day Status Bar
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = selectedDate.format(selectedDateFmt),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center
-                )
-                val statusLabel = when {
-                    !model.hasData -> "Tap 'Log Period' to begin"
-                    selectedDate == today && selectedInfo.daysLate > 0 -> {
-                        val unit = if (selectedInfo.daysLate == 1) "day" else "days"
-                        "Period ${selectedInfo.daysLate} $unit late • Day ${model.averageCycleLength + selectedInfo.daysLate}"
-                    }
-                    selectedInfo.periodStatus == PeriodStatus.LOGGED_START -> "Period Start • Day ${selectedInfo.cycleDay}"
-                    selectedInfo.periodStatus == PeriodStatus.LOGGED -> "Period • Day ${selectedInfo.cycleDay}"
-                    selectedInfo.periodStatus == PeriodStatus.PREDICTED_START ||
-                        selectedInfo.periodStatus == PeriodStatus.PREDICTED -> "Likely Period • Day ${selectedInfo.cycleDay}"
-                    selectedInfo.fertility == FertilityStatus.FERTILE -> "Fertile • Day ${selectedInfo.cycleDay}"
-                    selectedInfo.fertility == FertilityStatus.COULD_BE_FERTILE -> "Could Be Fertile • Day ${selectedInfo.cycleDay}"
-                    else -> "Not Fertile • Day ${selectedInfo.cycleDay}"
+                // Merged Selected Day Status Bar
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = selectedDate.format(selectedDateFmt),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        text = formatSelectedDayStatus(
+                            selectedDate = selectedDate,
+                            today = today,
+                            selectedInfo = selectedInfo,
+                            model = model
+                        ),
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
                 }
-                Text(
-                    text = statusLabel,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
             }
         }
     }
+}
+
+private fun formatSelectedDayStatus(
+    selectedDate: LocalDate,
+    today: LocalDate,
+    selectedInfo: DayClassification,
+    model: CycleModel
+): String = when {
+    !model.hasData -> "Tap 'Log Period' to begin"
+    selectedDate == today && selectedInfo.daysLate > 0 -> {
+        val unit = if (selectedInfo.daysLate == 1) "day" else "days"
+        "Period ${selectedInfo.daysLate} $unit late • Day ${model.averageCycleLength + selectedInfo.daysLate}"
+    }
+    selectedInfo.periodStatus == PeriodStatus.LOGGED_START -> "Period Start • Day ${selectedInfo.cycleDay}"
+    selectedInfo.periodStatus == PeriodStatus.LOGGED -> "Period • Day ${selectedInfo.cycleDay}"
+    selectedInfo.periodStatus == PeriodStatus.PREDICTED_START ||
+        selectedInfo.periodStatus == PeriodStatus.PREDICTED -> "Likely Period • Day ${selectedInfo.cycleDay}"
+    selectedInfo.fertility == FertilityStatus.FERTILE -> "Fertile • Day ${selectedInfo.cycleDay}"
+    selectedInfo.fertility == FertilityStatus.COULD_BE_FERTILE -> "Could Be Fertile • Day ${selectedInfo.cycleDay}"
+    else -> "Not Fertile • Day ${selectedInfo.cycleDay}"
 }
 
 @Composable
@@ -1459,7 +1560,8 @@ private fun MonthSection(
     selectedDate: LocalDate,
     periodStarts: List<LocalDate>,
     model: CycleModel,
-    onSelectDate: (LocalDate) -> Unit
+    onSelectDate: (LocalDate) -> Unit,
+    isCompactLandscape: Boolean = false
 ) {
     val firstOfMonth = month.atDay(1)
     // Monday = 0 .. Sunday = 6
@@ -1467,31 +1569,33 @@ private fun MonthSection(
     val daysInMonth = month.lengthOfMonth()
     val totalCells = leadingEmpty + daysInMonth
     val rows = (totalCells + 6) / 7
+    val cellGap = if (isCompactLandscape) 4.dp else 6.dp
+    val cellAspect = if (isCompactLandscape) 1.45f else 1f
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 10.dp)
+            .padding(top = if (isCompactLandscape) 4.dp else 10.dp)
     ) {
         Text(
             text = month.format(monthFormatter),
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(bottom = 8.dp)
+            modifier = Modifier.padding(bottom = if (isCompactLandscape) 4.dp else 8.dp)
         )
 
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(cellGap)) {
             for (r in 0 until rows) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(cellGap)
                 ) {
                     for (c in 0 until 7) {
                         val cellIndex = r * 7 + c
                         val dayNum = cellIndex - leadingEmpty + 1
                         if (dayNum < 1 || dayNum > daysInMonth) {
-                            Box(modifier = Modifier.weight(1f).aspectRatio(1f))
+                            Box(modifier = Modifier.weight(1f).aspectRatio(cellAspect))
                         } else {
                             val date = month.atDay(dayNum)
                             val info = CycleCalculator.classifyDate(date, periodStarts, model)
@@ -1549,13 +1653,13 @@ private fun MonthSection(
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .aspectRatio(1f)
-                                    .clip(RoundedCornerShape(10.dp))
+                                    .aspectRatio(cellAspect)
+                                    .clip(RoundedCornerShape(if (isCompactLandscape) 8.dp else 10.dp))
                                     .background(cellBrush)
                                     .border(
                                         width = if (isSelected) 2.5.dp else 1.dp,
                                         color = if (isSelected) MaterialTheme.colorScheme.onSurface else cellBorder,
-                                        shape = RoundedCornerShape(10.dp)
+                                        shape = RoundedCornerShape(if (isCompactLandscape) 8.dp else 10.dp)
                                     )
                                     .clickable { onSelectDate(date) }
                                     .padding(4.dp)

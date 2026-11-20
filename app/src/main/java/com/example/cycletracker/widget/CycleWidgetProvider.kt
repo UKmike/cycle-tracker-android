@@ -350,11 +350,14 @@ class CycleWidgetProvider : AppWidgetProvider() {
             val canvas = Canvas(bitmap)
 
             val strokeWidth = (if (isCompact) 4.2f else 6f) * dp
-            val markerOverflow = (if (isCompact) 3.5f else 5.5f) * dp
+            val haloR = (if (isCompact) 5.5f else 8.5f) * dp
+            val dotR = (if (isCompact) 3.5f else 5.5f) * dp
             val cardInset = 1.5f * dp
+            // Keep the ring concentrically inset from cardRect by at least haloR + 0.5dp
+            // so the full day marker halo never clips at straight edges or rounded corners.
             val ringInset = max(
-                markerOverflow + strokeWidth / 2f,
-                cardInset + strokeWidth / 2f + (if (isCompact) 1.5f else 2.5f) * dp
+                cardInset + haloR + 0.5f * dp,
+                cardInset + strokeWidth / 2f + (if (isCompact) 2f else 3f) * dp
             )
 
             val cardCorner = min(
@@ -516,8 +519,6 @@ class CycleWidgetProvider : AppWidgetProvider() {
                     val markerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         style = Paint.Style.FILL
                     }
-                    val haloR = (if (isCompact) 5.5f else 9.5f) * dp
-                    val dotR = (if (isCompact) 3.5f else 6f) * dp
 
                     markerPaint.color = haloColor
                     canvas.drawCircle(pos[0], pos[1], haloR, markerPaint)

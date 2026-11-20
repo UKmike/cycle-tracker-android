@@ -52,6 +52,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import android.app.WallpaperManager
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.BlurMaskFilter
 import android.os.Build
 import android.os.Handler
@@ -67,6 +68,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -91,6 +93,7 @@ import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
@@ -131,7 +134,7 @@ private val RedPeriod = Color(0xFFDC2626)
 fun CycleApp(viewModel: CycleViewModel = viewModel()) {
     val state by viewModel.uiState.collectAsState()
     val isSelectedLogged = state.periodStarts.contains(state.selectedDate)
-    var showHistoryPage by remember { mutableStateOf(false) }
+    var showHistoryPage by rememberSaveable { mutableStateOf(false) }
 
     if (showHistoryPage) {
         BackHandler { showHistoryPage = false }
@@ -143,6 +146,8 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
         )
         return
     }
+
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     Scaffold(
         topBar = {
@@ -195,58 +200,125 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
             )
         }
     ) { innerPadding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            Column(
+        if (isLandscape) {
+            Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 80.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(innerPadding)
+                    .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 1. Live Home Screen Widget Preview
-                HomeWidgetPreviewCard(
-                    todayInfo = state.todayClassification,
-                    hasData = state.model.hasData,
-                    periodStarts = state.periodStarts,
-                    model = state.model,
-                    modifier = Modifier.zIndex(1f)
-                )
-
-                // 2. Merged Interactive Calendar + Selected Day Section (fills remaining height)
-                CalendarCard(
-                    modifier = Modifier.weight(1f),
-                    selectedDate = state.selectedDate,
-                    periodStarts = state.periodStarts,
-                    model = state.model,
-                    onToday = viewModel::goToToday,
-                    onSelectDate = viewModel::selectDate
-                )
-            }
-
-            // 2x2 Calendar Key aligned at bottom-left within the FAB's vertical space
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .fillMaxWidth()
-                    .padding(start = 28.dp, end = 168.dp, bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                // Left half: Live Home Screen Widget Preview
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .zIndex(1f),
+                    contentAlignment = Alignment.Center
                 ) {
-                    LegendItem(GreenFertile, "Fertile", Modifier.weight(1f))
-                    LegendItem(YellowCouldBe, "Could be", Modifier.weight(1f))
+                    HomeWidgetPreviewCard(
+                        todayInfo = state.todayClassification,
+                        hasData = state.model.hasData,
+                        periodStarts = state.periodStarts,
+                        model = state.model
+                    )
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+
+                // Right half: Calendar + Selected Day + 2x2 Key (aligned with FAB)
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
                 ) {
-                    LegendItem(BlueNotFertile, "Not fertile", Modifier.weight(1f))
-                    LegendItem(RedPeriod, "Period", Modifier.weight(1f))
+                    CalendarCard(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(bottom = 72.dp),
+                        selectedDate = state.selectedDate,
+                        periodStarts = state.periodStarts,
+                        model = state.model,
+                        onToday = viewModel::goToToday,
+                        onSelectDate = viewModel::selectDate
+                    )
+
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .fillMaxWidth()
+                            .padding(start = 12.dp, end = 156.dp, bottom = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            LegendItem(GreenFertile, "Fertile", Modifier.weight(1f))
+                            LegendItem(YellowCouldBe, "Could be", Modifier.weight(1f))
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            LegendItem(BlueNotFertile, "Not fertile", Modifier.weight(1f))
+                            LegendItem(RedPeriod, "Period", Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 80.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // 1. Live Home Screen Widget Preview
+                    HomeWidgetPreviewCard(
+                        todayInfo = state.todayClassification,
+                        hasData = state.model.hasData,
+                        periodStarts = state.periodStarts,
+                        model = state.model,
+                        modifier = Modifier.zIndex(1f)
+                    )
+
+                    // 2. Merged Interactive Calendar + Selected Day Section (fills remaining height)
+                    CalendarCard(
+                        modifier = Modifier.weight(1f),
+                        selectedDate = state.selectedDate,
+                        periodStarts = state.periodStarts,
+                        model = state.model,
+                        onToday = viewModel::goToToday,
+                        onSelectDate = viewModel::selectDate
+                    )
+                }
+
+                // 2x2 Calendar Key aligned at bottom-left within the FAB's vertical space
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .fillMaxWidth()
+                        .padding(start = 28.dp, end = 168.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        LegendItem(GreenFertile, "Fertile", Modifier.weight(1f))
+                        LegendItem(YellowCouldBe, "Could be", Modifier.weight(1f))
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        LegendItem(BlueNotFertile, "Not fertile", Modifier.weight(1f))
+                        LegendItem(RedPeriod, "Period", Modifier.weight(1f))
+                    }
                 }
             }
         }
@@ -261,6 +333,8 @@ private fun HistoryScreen(
     onRemove: (LocalDate) -> Unit,
     onBack: () -> Unit
 ) {
+    val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -281,23 +355,58 @@ private fun HistoryScreen(
             )
         }
     ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            CycleLengthGraphCard(
-                periodStarts = periodStarts,
-                model = model
-            )
-            InsightsCard(model = model)
-            HistoryCard(
-                periodStarts = periodStarts,
-                onRemove = onRemove,
-                modifier = Modifier.weight(1f)
-            )
+        if (isLandscape) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                // Left half: Cycle Length Graph filling available height
+                CycleLengthGraphCard(
+                    periodStarts = periodStarts,
+                    model = model,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    fillHeight = true
+                )
+
+                // Right half: Cycle Insights + scrollable Period History
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    InsightsCard(model = model)
+                    HistoryCard(
+                        periodStarts = periodStarts,
+                        onRemove = onRemove,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        } else {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                CycleLengthGraphCard(
+                    periodStarts = periodStarts,
+                    model = model
+                )
+                InsightsCard(model = model)
+                HistoryCard(
+                    periodStarts = periodStarts,
+                    onRemove = onRemove,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
     }
 }
@@ -1464,7 +1573,9 @@ private fun LegendItem(color: Color, label: String, modifier: Modifier = Modifie
 @Composable
 private fun CycleLengthGraphCard(
     periodStarts: List<LocalDate>,
-    model: CycleModel
+    model: CycleModel,
+    modifier: Modifier = Modifier,
+    fillHeight: Boolean = false
 ) {
     val sortedAsc = remember(periodStarts) { periodStarts.sorted() }
     val allCycles = remember(sortedAsc) {
@@ -1485,12 +1596,13 @@ private fun CycleLengthGraphCard(
     )
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = (if (fillHeight) Modifier.fillMaxSize() else Modifier.fillMaxWidth())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
@@ -1532,7 +1644,7 @@ private fun CycleLengthGraphCard(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(120.dp)
+                        .then(if (fillHeight) Modifier.weight(1f) else Modifier.height(120.dp))
                 ) {
                     Column(
                         modifier = Modifier

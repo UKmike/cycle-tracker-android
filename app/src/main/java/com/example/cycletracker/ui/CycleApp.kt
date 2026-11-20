@@ -1357,7 +1357,25 @@ private fun CalendarCard(
                     onClick = {
                         onToday()
                         coroutineScope.launch {
-                            listState.animateScrollToItem(monthsPast)
+                            if (isCompactLandscape) {
+                                val viewportH = listState.layoutInfo.viewportSize.height
+                                val monthH = listState.layoutInfo.visibleItemsInfo
+                                    .firstOrNull { it.index == monthsPast }?.size
+                                    ?: listState.layoutInfo.visibleItemsInfo.firstOrNull()?.size
+                                    ?: viewportH
+                                val leadingEmpty = currentMonth.atDay(1).dayOfWeek.value - 1
+                                val totalRows = (leadingEmpty + currentMonth.lengthOfMonth() + 6) / 7
+                                val todayRow = (leadingEmpty + today.dayOfMonth - 1) / 7
+                                val headerFrac = 0.12f
+                                val rowCenterY = monthH * (
+                                    headerFrac + (1f - headerFrac) * ((todayRow + 0.5f) / totalRows)
+                                )
+                                // Place today's week row just below halfway (58% down the viewport)
+                                val scrollOffset = (rowCenterY - viewportH * 0.58f).toInt()
+                                listState.animateScrollToItem(monthsPast, scrollOffset)
+                            } else {
+                                listState.animateScrollToItem(monthsPast)
+                            }
                         }
                     },
                     shape = RoundedCornerShape(50),

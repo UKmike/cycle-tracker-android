@@ -266,7 +266,7 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 views.setViewVisibility(R.id.widget_compact_unit, View.VISIBLE)
                 views.setViewVisibility(R.id.widget_subtitle, View.GONE)
                 views.setViewVisibility(R.id.widget_footer, View.GONE)
-                views.setTextViewTextSize(R.id.widget_days_number, TypedValue.COMPLEX_UNIT_SP, 22f)
+                views.setTextViewTextSize(R.id.widget_days_number, TypedValue.COMPLEX_UNIT_SP, 28f)
                 views.setTextViewTextSize(R.id.widget_compact_unit, TypedValue.COMPLEX_UNIT_SP, 12f)
             } else {
                 val padPx = TypedValue.applyDimension(
@@ -278,8 +278,8 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 views.setViewVisibility(R.id.widget_compact_unit, View.GONE)
                 views.setViewVisibility(R.id.widget_subtitle, View.VISIBLE)
                 views.setViewVisibility(R.id.widget_footer, View.VISIBLE)
-                views.setTextViewTextSize(R.id.widget_days_number, TypedValue.COMPLEX_UNIT_SP, 34f)
-                views.setTextViewTextSize(R.id.widget_days_unit, TypedValue.COMPLEX_UNIT_SP, 13f)
+                views.setTextViewTextSize(R.id.widget_days_number, TypedValue.COMPLEX_UNIT_SP, 42f)
+                views.setTextViewTextSize(R.id.widget_days_unit, TypedValue.COMPLEX_UNIT_SP, 14f)
                 views.setTextViewTextSize(R.id.widget_subtitle, TypedValue.COMPLEX_UNIT_SP, 12f)
             }
 

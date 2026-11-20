@@ -101,6 +101,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.Lifecycle
@@ -701,12 +702,13 @@ private fun HomeWidgetPreviewCard(
                         text = displayStatus,
                         color = contentColor,
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.02.em,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                     )
                 }
 
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(6.dp))
 
                 val displayCount = when {
                     !hasData -> null
@@ -717,17 +719,22 @@ private fun HomeWidgetPreviewCard(
                     Text(
                         text = displayCount?.toString() ?: "--",
                         color = contentColor,
-                        fontSize = 36.sp,
-                        fontWeight = FontWeight.Bold,
-                        lineHeight = 36.sp
+                        style = TextStyle(
+                            fontSize = 44.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            lineHeight = 44.sp,
+                            letterSpacing = (-0.04).em,
+                            fontFeatureSettings = "tnum"
+                        )
                     )
                     Spacer(Modifier.width(6.dp))
                     Text(
                         text = if (displayCount == 1) "day" else "days",
-                        color = contentColor.copy(alpha = 0.9f),
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(bottom = 4.dp)
+                        color = contentColor.copy(alpha = 0.92f),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        letterSpacing = (-0.015).em,
+                        modifier = Modifier.padding(bottom = 5.dp)
                     )
                 }
 
@@ -740,7 +747,8 @@ private fun HomeWidgetPreviewCard(
                     },
                     color = contentColor.copy(alpha = 0.92f),
                     fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = (-0.01).em
                 )
 
                 if (hasData && todayInfo.nextPeriodDate != null) {
@@ -754,7 +762,10 @@ private fun HomeWidgetPreviewCard(
                     Text(
                         text = footerText,
                         color = contentColor.copy(alpha = 0.85f),
-                        fontSize = 11.sp
+                        style = TextStyle(
+                            fontSize = 11.sp,
+                            fontFeatureSettings = "tnum"
+                        )
                     )
                 }
             }
@@ -1471,9 +1482,13 @@ private fun MonthSection(
                             ) {
                                 Text(
                                     text = dayNum.toString(),
-                                    fontSize = 12.sp,
-                                    fontWeight = if (isToday) FontWeight.ExtraBold else FontWeight.SemiBold,
                                     color = cellText,
+                                    style = TextStyle(
+                                        fontSize = 12.5.sp,
+                                        fontWeight = if (isToday) FontWeight.ExtraBold else FontWeight.Bold,
+                                        letterSpacing = (-0.02).em,
+                                        fontFeatureSettings = "tnum"
+                                    ),
                                     modifier = Modifier.align(Alignment.TopStart)
                                 )
                                 if (isToday) {
@@ -1592,7 +1607,9 @@ private fun CycleLengthGraphCard(
     val valueStyle = TextStyle(
         color = MaterialTheme.colorScheme.onSurface,
         fontSize = 10.sp,
-        fontWeight = FontWeight.SemiBold
+        fontWeight = FontWeight.Bold,
+        letterSpacing = (-0.02).em,
+        fontFeatureSettings = "tnum"
     )
 
     Card(
@@ -1830,12 +1847,20 @@ private fun InsightsCard(model: CycleModel) {
 private fun StatTile(label: String, value: String, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
     ) {
-        Column(modifier = Modifier.padding(10.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 11.dp, vertical = 10.dp)) {
             Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(value, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(
+                text = value,
+                style = TextStyle(
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    letterSpacing = (-0.03).em,
+                    fontFeatureSettings = "tnum"
+                )
+            )
         }
     }
 }
@@ -1862,7 +1887,7 @@ private fun HistoryCard(
             Text(
                 text = "Period History (${sortedDesc.size})",
                 style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.Bold
             )
             Spacer(Modifier.height(8.dp))
 
@@ -1920,8 +1945,11 @@ private fun HistoryCard(
                         ) {
                             Text(
                                 text = date.format(fmt),
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Medium,
+                                style = TextStyle(
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    fontFeatureSettings = "tnum"
+                                ),
                                 modifier = Modifier.weight(1.3f)
                             )
                             Box(
@@ -1935,8 +1963,12 @@ private fun HistoryCard(
                                     ) {
                                         Text(
                                             text = "$cycleLen days",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.SemiBold,
+                                            style = TextStyle(
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                letterSpacing = (-0.02).em,
+                                                fontFeatureSettings = "tnum"
+                                            ),
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
                                         )
                                     }

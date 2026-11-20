@@ -7,12 +7,47 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.em
 import com.example.cycletracker.ui.CycleApp
+
+private val ExpressiveTypography = Typography().let { base ->
+    base.copy(
+        displayLarge = base.displayLarge.copy(
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = (-0.04).em,
+            fontFeatureSettings = "tnum"
+        ),
+        displayMedium = base.displayMedium.copy(
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = (-0.035).em,
+            fontFeatureSettings = "tnum"
+        ),
+        headlineMedium = base.headlineMedium.copy(
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = (-0.03).em,
+            fontFeatureSettings = "tnum"
+        ),
+        titleLarge = base.titleLarge.copy(
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = (-0.025).em
+        ),
+        titleMedium = base.titleMedium.copy(
+            fontWeight = FontWeight.Bold,
+            letterSpacing = (-0.02).em
+        ),
+        titleSmall = base.titleSmall.copy(
+            fontWeight = FontWeight.Bold,
+            letterSpacing = (-0.015).em
+        )
+    )
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -28,7 +63,10 @@ class MainActivity : ComponentActivity() {
                 darkTheme -> darkColorScheme()
                 else -> lightColorScheme()
             }
-            MaterialTheme(colorScheme = colors) {
+            MaterialTheme(
+                colorScheme = colors,
+                typography = ExpressiveTypography
+            ) {
                 CycleApp()
             }
         }

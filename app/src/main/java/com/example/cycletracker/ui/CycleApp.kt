@@ -19,14 +19,22 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -156,6 +164,9 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing.only(
+            WindowInsetsSides.Top + WindowInsetsSides.Horizontal
+        ),
         topBar = {
             if (!isLandscape) {
                 TopAppBar(
@@ -189,25 +200,24 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
             }
         },
         floatingActionButton = {
-            if (!isLandscape) {
-                ExtendedFloatingActionButton(
-                    onClick = { viewModel.togglePeriodStart(state.selectedDate) },
-                    containerColor = if (isSelectedLogged) GreenFertile else RedPeriod,
-                    contentColor = Color.White,
-                    icon = {
-                        Icon(
-                            imageVector = if (isSelectedLogged) Icons.Default.Check else Icons.Default.Add,
-                            contentDescription = null
-                        )
-                    },
-                    text = {
-                        Text(
-                            text = if (isSelectedLogged) "Remove Period" else "Log Period",
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                )
-            }
+            ExtendedFloatingActionButton(
+                onClick = { viewModel.togglePeriodStart(state.selectedDate) },
+                modifier = Modifier.navigationBarsPadding(),
+                containerColor = if (isSelectedLogged) GreenFertile else RedPeriod,
+                contentColor = Color.White,
+                icon = {
+                    Icon(
+                        imageVector = if (isSelectedLogged) Icons.Default.Check else Icons.Default.Add,
+                        contentDescription = null
+                    )
+                },
+                text = {
+                    Text(
+                        text = if (isSelectedLogged) "Remove Period" else "Log Period",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            )
         }
     ) { innerPadding ->
         if (isLandscape) {
@@ -219,14 +229,16 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                    .padding(start = 14.dp, end = 14.dp, top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // Left half: Compact header + Live Widget + Selected Day & Log Period + Legend
+                // Left half: Compact header + Live Widget + Selected Day + Legend
                 Column(
                     modifier = Modifier
                         .weight(0.46f)
-                        .fillMaxHeight(),
+                        .fillMaxHeight()
+                        .navigationBarsPadding()
+                        .padding(bottom = 8.dp),
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
                     // Compact header row (frees full vertical height for the calendar on the right)
@@ -274,59 +286,29 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
                         modifier = Modifier.zIndex(1f)
                     )
 
-                    // Bottom controls: Selected Day + Log Period action + single-row Legend
+                    // Bottom info: Selected Day + single-row Legend
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 4.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = state.selectedDate.format(selectedDateFmt),
-                                    style = MaterialTheme.typography.titleSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = formatSelectedDayStatus(
-                                        selectedDate = state.selectedDate,
-                                        today = today,
-                                        selectedInfo = selectedInfo,
-                                        model = state.model
-                                    ),
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            Surface(
-                                onClick = { viewModel.togglePeriodStart(state.selectedDate) },
-                                shape = RoundedCornerShape(14.dp),
-                                color = if (isSelectedLogged) GreenFertile else RedPeriod,
-                                contentColor = Color.White
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = if (isSelectedLogged) Icons.Default.Check else Icons.Default.Add,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(
-                                        text = if (isSelectedLogged) "Remove" else "Log Period",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                text = state.selectedDate.format(selectedDateFmt),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = formatSelectedDayStatus(
+                                    selectedDate = state.selectedDate,
+                                    today = today,
+                                    selectedInfo = selectedInfo,
+                                    model = state.model
+                                ),
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
 
                         Row(
@@ -341,7 +323,7 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
                     }
                 }
 
-                // Right half: Full-height interactive calendar showing the entire month cleanly
+                // Right half: Full-height interactive calendar extending behind the bottom home bar
                 CalendarCard(
                     modifier = Modifier
                         .weight(0.54f)
@@ -355,6 +337,7 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
                 )
             }
         } else {
+            val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -363,7 +346,7 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 80.dp),
+                        .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 80.dp + navBarBottom),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     // 1. Live Home Screen Widget Preview
@@ -391,6 +374,7 @@ fun CycleApp(viewModel: CycleViewModel = viewModel()) {
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .fillMaxWidth()
+                        .navigationBarsPadding()
                         .padding(start = 28.dp, end = 168.dp, bottom = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
@@ -425,6 +409,9 @@ private fun HistoryScreen(
     val isLandscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     Scaffold(
+        contentWindowInsets = WindowInsets.safeDrawing.only(
+            WindowInsetsSides.Top + WindowInsetsSides.Horizontal
+        ),
         topBar = {
             TopAppBar(
                 title = {
@@ -449,7 +436,7 @@ private fun HistoryScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
+                    .padding(start = 16.dp, end = 16.dp, top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 // Left half: Cycle Length Graph filling available height
@@ -458,11 +445,13 @@ private fun HistoryScreen(
                     model = model,
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxHeight(),
+                        .fillMaxHeight()
+                        .navigationBarsPadding()
+                        .padding(bottom = 10.dp),
                     fillHeight = true
                 )
 
-                // Right half: Cycle Insights + scrollable Period History
+                // Right half: Cycle Insights + scrollable Period History extending behind home bar
                 Column(
                     modifier = Modifier
                         .weight(1f)
@@ -482,7 +471,7 @@ private fun HistoryScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp),
+                    .padding(start = 16.dp, end = 16.dp, top = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 CycleLengthGraphCard(
@@ -1411,11 +1400,15 @@ private fun CalendarCard(
             Spacer(Modifier.height(if (isCompactLandscape) 2.dp else 4.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
 
+            val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
+                contentPadding = PaddingValues(
+                    bottom = if (isCompactLandscape) 72.dp + navBarBottom else 4.dp
+                ),
                 verticalArrangement = Arrangement.spacedBy(if (isCompactLandscape) 6.dp else 10.dp)
             ) {
                 items(
@@ -2108,10 +2101,12 @@ private fun HistoryCard(
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
+                val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth()
+                        .fillMaxWidth(),
+                    contentPadding = PaddingValues(bottom = navBarBottom + 8.dp)
                 ) {
                     itemsIndexed(
                         items = sortedDesc,

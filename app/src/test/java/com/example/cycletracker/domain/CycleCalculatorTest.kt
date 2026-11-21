@@ -1,6 +1,8 @@
 package com.example.cycletracker.domain
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
@@ -97,5 +99,117 @@ class CycleCalculatorTest {
         val threeDaysLate = CycleCalculator.classifyDate(expectedDay.plusDays(3), starts, model)
         assertEquals(3, threeDaysLate.daysLate)
         assertEquals(expectedDay, threeDaysLate.expectedPeriodDate)
+    }
+
+    @Test
+    fun classifyRangeMatchesClassifyDateAcrossAllRegions() {
+        // Deliberately unsorted with a duplicate and an outlier (>60d gap)
+        val rawStarts = listOf(
+            LocalDate.of(2026, 10, 1),
+            LocalDate.of(2026, 6, 1),
+            LocalDate.of(2026, 9, 2),
+            LocalDate.of(2026, 9, 2), // duplicate
+            LocalDate.of(2026, 10, 31)
+        )
+        val model = CycleCalculator.computeModel(rawStarts)
+        val rangeStart = LocalDate.of(2026, 4, 20) // well before firstStart
+        val totalDays = 240 // spans before firstStart, outlier gap, normal cycles, predicted & late
+
+        val batch = CycleCalculator.classifyRange(rangeStart, totalDays, rawStarts, model, periodLength = 6)
+        assertEquals(totalDays, batch.size)
+
+        for (offset in 0 until totalDays) {
+            val d = rangeStart.plusDays(offset.toLong())
+            val single = CycleCalculator.classifyDate(d, rawStarts, model, periodLength = 6)
+            assertEquals("Mismatch on $d", single, batch[offset])
+        }
+    }
+
+    @Test
+    fun customPeriodLengthAdjustsLoggedAndPredictedSpan() {
+        val start = LocalDate.of(2026, 11, 1)
+        val starts = listOf(start)
+        val model = CycleCalculator.computeModel(starts)
+
+        // With periodLength = 3: Day 3 is LOGGED, Day 4 is null
+        assertEquals(PeriodStatus.LOGGED, CycleCalculator.classifyDate(start.plusDays(2), starts, model, 3).periodStatus)
+        assertNull(CycleCalculator.classifyDate(start.plusDays(3), starts, model, 3).periodStatus)
+
+        // With periodLength = 7: Day 7 is LOGGED, Day 8 is null; predicted Day 7 is PREDICTED
+        assertEquals(PeriodStatus.LOGGED, CycleCalculator.classifyDate(start.plusDays(6), starts, model, 7).periodStatus)
+        assertNull(CycleCalculator.classifyDate(start.plusDays(7), starts, model, 7).periodStatus)
+        assertEquals(
+            PeriodStatus.PREDICTED,
+            CycleCalculator.classifyDate(start.plusDays(28 + 6), starts, model, 7).periodStatus
+        )
+    }
+
+    @Test
+    fun slidingWindowUsesOnlyLastSixValidCycles() {
+        // 8 valid cycles: first two are 20d (should drop off window), last six are 30d
+        val starts = mutableListOf(LocalDate.of(2026, 1, 1))
+        val gaps = listOf(20, 20, 30, 30, 30, 30, 30, 30)
+        for (g in gaps) {
+            starts.add(starts.last().plusDays(g.toLong()))
+        }
+        val model = CycleCalculator.computeModel(starts)
+        assertEquals(6, model.cyclesUsed)
+        assertEquals(30, model.averageCycleLength)
+        assertEquals(30, model.minCycleLength)
+        assertEquals(30, model.maxCycleLength)
+        assertEquals(0, model.variabilityDays)
+    }
+
+    @Test
+    fun emptyStartsReturnsDefaultEmptyModelAndRange() {
+        val model = CycleCalculator.computeModel(emptyList())
+        assertFalse(model.hasData)
+        assertEquals(CycleCalculator.DEFAULT_CYCLE_LENGTH, model.averageCycleLength)
+
+        val range = CycleCalculator.classifyRange(LocalDate.of(2026, 11, 1), 5, emptyList(), model)
+        assertEquals(5, range.size)
+        assertTrue(range.all { it.fertility == FertilityStatus.NOT_FERTILE && it.periodStatus == null })
+
+        val reminders = CycleCalculator.computeNextReminderDates(LocalDate.of(2026, 11, 1), emptyList(), model)
+        assertNull(reminders.periodReminderDate)
+        assertNull(reminders.fertileReminderDate)
+    }
+
+    @Test
+    fun computesNextReminderDatesAccurately() {
+        val start = LocalDate.of(2026, 11, 1)
+        val starts = listOf(start)
+        val model = CycleCalculator.computeModel(starts) // 28d avg, ovulation day 14, fertile starts day 12 (Nov 12)
+
+        // On Nov 5: fertile reminder = Nov 12, period reminder (2d before Nov 29) = Nov 27
+        val r1 = CycleCalculator.computeNextReminderDates(
+            earliestDate = LocalDate.of(2026, 11, 5),
+            periodStarts = starts,
+            model = model,
+            periodLeadDays = 2
+        )
+        assertEquals(LocalDate.of(2026, 11, 27), r1.periodReminderDate)
+        assertEquals(LocalDate.of(2026, 11, 29), r1.periodTargetDate)
+        assertEquals(LocalDate.of(2026, 11, 12), r1.fertileReminderDate)
+
+        // On Nov 13 (day after fertile started): fertile rolls to next cycle (Dec 10)
+        val r2 = CycleCalculator.computeNextReminderDates(
+            earliestDate = LocalDate.of(2026, 11, 13),
+            periodStarts = starts,
+            model = model,
+            periodLeadDays = 2
+        )
+        assertEquals(LocalDate.of(2026, 11, 27), r2.periodReminderDate)
+        assertEquals(LocalDate.of(2026, 12, 10), r2.fertileReminderDate)
+
+        // On Nov 28 (after 2d lead day Nov 27 passed): period rolls to cycle 2 (Dec 27 - 2 = Dec 25)
+        val r3 = CycleCalculator.computeNextReminderDates(
+            earliestDate = LocalDate.of(2026, 11, 28),
+            periodStarts = starts,
+            model = model,
+            periodLeadDays = 2
+        )
+        assertEquals(LocalDate.of(2026, 12, 25), r3.periodReminderDate)
+        assertEquals(LocalDate.of(2026, 12, 27), r3.periodTargetDate)
     }
 }

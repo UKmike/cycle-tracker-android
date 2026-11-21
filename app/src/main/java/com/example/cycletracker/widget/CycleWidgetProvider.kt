@@ -27,21 +27,21 @@ import com.example.cycletracker.domain.CycleCalculator
 import com.example.cycletracker.domain.CycleModel
 import com.example.cycletracker.domain.DayClassification
 import com.example.cycletracker.domain.FertilityStatus
-import com.example.cycletracker.domain.PeriodStatus
+import com.example.cycletracker.notifications.CycleReminderScheduler
+import com.example.cycletracker.ui.CyclePalette
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sin
 
 class CycleWidgetProvider : AppWidgetProvider() {
 
     override fun onEnabled(context: Context) {
         super.onEnabled(context)
-        scheduleMidnightUpdate(context)
+        scheduleMidnightUpdate(context, assumeHasWidgets = true)
     }
 
     override fun onDisabled(context: Context) {
@@ -54,10 +54,13 @@ class CycleWidgetProvider : AppWidgetProvider() {
         appWidgetManager: AppWidgetManager,
         appWidgetIds: IntArray
     ) {
+        if (appWidgetIds.isEmpty()) return
+        val batch = loadWidgetBatchData(context)
         for (appWidgetId in appWidgetIds) {
-            updateWidget(context, appWidgetManager, appWidgetId)
+            updateWidget(context, appWidgetManager, appWidgetId, batch)
         }
-        scheduleMidnightUpdate(context)
+        batch.repo.setLastWidgetRenderEpochDay(batch.today.toEpochDay())
+        scheduleMidnightUpdate(context, assumeHasWidgets = true)
     }
 
     override fun onAppWidgetOptionsChanged(
@@ -67,18 +70,24 @@ class CycleWidgetProvider : AppWidgetProvider() {
         newOptions: Bundle
     ) {
         super.onAppWidgetOptionsChanged(context, appWidgetManager, appWidgetId, newOptions)
-        updateWidget(context, appWidgetManager, appWidgetId, newOptions)
+        val batch = loadWidgetBatchData(context)
+        updateWidget(context, appWidgetManager, appWidgetId, batch, newOptions)
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
         when (intent.action) {
             ACTION_MIDNIGHT_UPDATE,
-            Intent.ACTION_DATE_CHANGED,
+            Intent.ACTION_DATE_CHANGED -> {
+                updateAllWidgets(context, onlyIfDateChanged = true)
+            }
             Intent.ACTION_TIME_CHANGED,
             Intent.ACTION_TIMEZONE_CHANGED,
             Intent.ACTION_BOOT_COMPLETED,
-            Intent.ACTION_MY_PACKAGE_REPLACED -> updateAllWidgets(context)
+            Intent.ACTION_MY_PACKAGE_REPLACED -> {
+                updateAllWidgets(context, onlyIfDateChanged = false)
+                CycleReminderScheduler.reschedule(context)
+            }
         }
     }
 
@@ -87,28 +96,32 @@ class CycleWidgetProvider : AppWidgetProvider() {
             "com.example.cycletracker.action.MIDNIGHT_WIDGET_UPDATE"
         private const val MIDNIGHT_REQUEST_CODE = 1001
 
-        private val shortDateFmt = DateTimeFormatter.ofPattern("MMM d")
-
-        private val COLOR_GREEN = Color.parseColor("#059669")
-        private val COLOR_YELLOW = Color.parseColor("#FBBF24")
-        private val COLOR_LIGHT_BLUE = Color.parseColor("#38BDF8")
-        private val COLOR_RED_PERIOD = Color.parseColor("#DC2626")
-
-        fun updateAllWidgets(context: Context) {
+        fun updateAllWidgets(context: Context, onlyIfDateChanged: Boolean = false) {
             val manager = AppWidgetManager.getInstance(context)
             val componentName = ComponentName(context, CycleWidgetProvider::class.java)
             val ids = manager.getAppWidgetIds(componentName)
-            for (id in ids) {
-                updateWidget(context, manager, id)
-            }
-            if (ids.isNotEmpty()) {
-                scheduleMidnightUpdate(context)
-            } else {
+            if (ids.isEmpty()) {
                 cancelMidnightUpdate(context)
+                return
             }
+
+            val repo = CycleRepository(context)
+            val today = LocalDate.now()
+            val todayEpoch = today.toEpochDay()
+            if (onlyIfDateChanged && repo.getLastWidgetRenderEpochDay() == todayEpoch) {
+                scheduleMidnightUpdate(context, assumeHasWidgets = true)
+                return
+            }
+
+            val batch = loadWidgetBatchData(context, repo, today)
+            for (id in ids) {
+                updateWidget(context, manager, id, batch)
+            }
+            repo.setLastWidgetRenderEpochDay(todayEpoch)
+            scheduleMidnightUpdate(context, assumeHasWidgets = true)
         }
 
-        private fun midnightPendingIntent(context: Context): PendingIntent {
+        private fun midnightPendingIntent(context: Context, flags: Int): PendingIntent? {
             val intent = Intent(context, CycleWidgetProvider::class.java).apply {
                 action = ACTION_MIDNIGHT_UPDATE
             }
@@ -116,14 +129,16 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 context,
                 MIDNIGHT_REQUEST_CODE,
                 intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                flags
             )
         }
 
-        fun scheduleMidnightUpdate(context: Context) {
-            val manager = AppWidgetManager.getInstance(context)
-            val componentName = ComponentName(context, CycleWidgetProvider::class.java)
-            if (manager.getAppWidgetIds(componentName).isEmpty()) return
+        fun scheduleMidnightUpdate(context: Context, assumeHasWidgets: Boolean = false) {
+            if (!assumeHasWidgets) {
+                val manager = AppWidgetManager.getInstance(context)
+                val componentName = ComponentName(context, CycleWidgetProvider::class.java)
+                if (manager.getAppWidgetIds(componentName).isEmpty()) return
+            }
 
             val nextMidnightMillis = LocalDate.now()
                 .plusDays(1)
@@ -131,39 +146,40 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 .toInstant()
                 .toEpochMilli()
 
+            val pi = midnightPendingIntent(
+                context,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            ) ?: return
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            alarmManager.set(
-                AlarmManager.RTC,
-                nextMidnightMillis,
-                midnightPendingIntent(context)
-            )
+            alarmManager.set(AlarmManager.RTC, nextMidnightMillis, pi)
         }
 
         private fun cancelMidnightUpdate(context: Context) {
+            val existing = midnightPendingIntent(
+                context,
+                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+            ) ?: return
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            alarmManager.cancel(midnightPendingIntent(context))
+            alarmManager.cancel(existing)
+            existing.cancel()
         }
 
-        private fun updateWidget(
+        private fun loadWidgetBatchData(
             context: Context,
-            appWidgetManager: AppWidgetManager,
-            appWidgetId: Int,
-            optionsOverride: Bundle? = null
-        ) {
-            val options = optionsOverride ?: appWidgetManager.getAppWidgetOptions(appWidgetId)
-            val minWidthDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 180)
-            val minHeightDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 110)
-            val isCompact1x1 = minWidthDp < 110 || minHeightDp < 90
-
-            val repo = CycleRepository(context)
+            repo: CycleRepository = CycleRepository(context),
+            today: LocalDate = LocalDate.now()
+        ): WidgetBatchData {
             val starts = repo.getPeriodStarts()
-            val today = LocalDate.now()
+            val settings = repo.getSettings()
             val model = CycleCalculator.computeModel(starts)
-            val info = CycleCalculator.classifyDate(today, starts, model)
+            val info = CycleCalculator.classifyDate(
+                date = today,
+                periodStarts = starts,
+                model = model,
+                periodLength = settings.periodLength
+            )
+            val cycleColors = CyclePalette.computeCycleDayArgbColors(starts, model, settings.periodLength)
 
-            val views = RemoteViews(context.packageName, R.layout.widget_cycle)
-
-            // Launch MainActivity on tap without duplicating it on the back stack
             val launchIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or
                     Intent.FLAG_ACTIVITY_CLEAR_TOP or
@@ -175,56 +191,64 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 launchIntent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
-            views.setOnClickPendingIntent(R.id.widget_root, pendingIntent)
-
-            val blackGradStart = Color.parseColor("#262626")
-            val blackGradMid = Color.parseColor("#141414")
-            val blackGradEnd = Color.parseColor("#050505")
 
             val style = when {
-                info.periodStatus == PeriodStatus.LOGGED_START ||
-                    info.periodStatus == PeriodStatus.LOGGED -> WidgetStyle(
-                    blackGradStart,
-                    blackGradMid,
-                    blackGradEnd,
-                    Color.parseColor("#EF4444"),
-                    Color.parseColor("#FCA5A5"),
-                    "Period"
+                info.isLoggedPeriod -> WidgetStyle(
+                    textColor = CyclePalette.ARGB_WIDGET_TEXT_PERIOD,
+                    footerColor = CyclePalette.ARGB_WIDGET_FOOTER_PERIOD,
+                    statusLabel = "Period"
                 )
-                info.periodStatus == PeriodStatus.PREDICTED_START ||
-                    info.periodStatus == PeriodStatus.PREDICTED -> WidgetStyle(
-                    blackGradStart,
-                    blackGradMid,
-                    blackGradEnd,
-                    Color.parseColor("#FCA5A5"),
-                    Color.parseColor("#F87171"),
-                    "Likely Period"
+                info.isPredictedPeriod -> WidgetStyle(
+                    textColor = CyclePalette.ARGB_WIDGET_TEXT_LIKELY,
+                    footerColor = CyclePalette.ARGB_WIDGET_FOOTER_LIKELY,
+                    statusLabel = "Likely Period"
                 )
                 info.fertility == FertilityStatus.FERTILE -> WidgetStyle(
-                    blackGradStart,
-                    blackGradMid,
-                    blackGradEnd,
-                    Color.parseColor("#10B981"),
-                    Color.parseColor("#6EE7B7"),
-                    "Fertile"
+                    textColor = CyclePalette.ARGB_GREEN_BRIGHT,
+                    footerColor = CyclePalette.ARGB_WIDGET_FOOTER_FERTILE,
+                    statusLabel = "Fertile"
                 )
                 info.fertility == FertilityStatus.COULD_BE_FERTILE -> WidgetStyle(
-                    blackGradStart,
-                    blackGradMid,
-                    blackGradEnd,
-                    COLOR_YELLOW,
-                    Color.parseColor("#FDE68A"),
-                    "Could Be Fertile"
+                    textColor = CyclePalette.ARGB_YELLOW_COULD_BE,
+                    footerColor = CyclePalette.ARGB_WIDGET_FOOTER_COULD_BE,
+                    statusLabel = "Could Be Fertile"
                 )
                 else -> WidgetStyle(
-                    blackGradStart,
-                    blackGradMid,
-                    blackGradEnd,
-                    COLOR_LIGHT_BLUE,
-                    Color.parseColor("#7DD3FC"),
-                    "Not Fertile"
+                    textColor = CyclePalette.ARGB_BLUE_NOT_FERTILE,
+                    footerColor = CyclePalette.ARGB_WIDGET_FOOTER_NOT_FERTILE,
+                    statusLabel = "Not Fertile"
                 )
             }
+
+            return WidgetBatchData(
+                repo = repo,
+                today = today,
+                model = model,
+                info = info,
+                cycleColors = cycleColors,
+                style = style,
+                launchPendingIntent = pendingIntent
+            )
+        }
+
+        private fun updateWidget(
+            context: Context,
+            appWidgetManager: AppWidgetManager,
+            appWidgetId: Int,
+            batch: WidgetBatchData,
+            optionsOverride: Bundle? = null
+        ) {
+            val options = optionsOverride ?: appWidgetManager.getAppWidgetOptions(appWidgetId)
+            val minWidthDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 180)
+            val minHeightDp = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 110)
+            val isCompact1x1 = minWidthDp < 110 || minHeightDp < 90
+
+            val model = batch.model
+            val info = batch.info
+            val style = batch.style
+
+            val views = RemoteViews(context.packageName, R.layout.widget_cycle)
+            views.setOnClickPendingIntent(R.id.widget_root, batch.launchPendingIntent)
 
             val portraitWidthDp = max(minWidthDp, 56)
             val portraitHeightDp = max(
@@ -232,49 +256,46 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 max(minHeightDp, 56)
             )
 
-            // Render rounded card + gradient + frosted glass sheen + cycle outline
             val bgBitmap = renderWidgetBackgroundBitmap(
                 context = context,
                 widthDp = portraitWidthDp,
                 heightDp = portraitHeightDp,
                 isCompact = isCompact1x1,
-                gradStart = style.gradStart,
-                gradMid = style.gradMid,
-                gradEnd = style.gradEnd,
-                periodStarts = starts,
-                model = model,
+                accentColor = style.textColor,
+                cycleColors = batch.cycleColors,
                 todayInfo = info
             )
             views.setImageViewBitmap(R.id.widget_bg_image, bgBitmap)
 
-            views.setTextViewText(R.id.widget_status_badge, style.statusLabel)
             views.setTextColor(R.id.widget_status_badge, style.textColor)
             views.setTextColor(R.id.widget_days_number, style.textColor)
             views.setTextColor(R.id.widget_days_unit, style.textColor)
+            views.setTextColor(R.id.widget_compact_days_number, style.textColor)
             views.setTextColor(R.id.widget_compact_unit, style.textColor)
             views.setTextColor(R.id.widget_subtitle, style.textColor)
             views.setTextColor(R.id.widget_footer, style.footerColor)
 
-            // Adapt layout density for 1x1 vs larger sizes
+            // Adapt layout density for 1x1 (auto-sizing compact text) vs larger sizes
+            val metrics = context.resources.displayMetrics
             if (isCompact1x1) {
                 val padPx = TypedValue.applyDimension(
-                    TypedValue.COMPLEX_UNIT_DIP, 8f, context.resources.displayMetrics
+                    TypedValue.COMPLEX_UNIT_DIP, 10f, metrics
                 ).toInt()
                 views.setViewPadding(R.id.widget_content, padPx, padPx, padPx, padPx)
                 views.setViewVisibility(R.id.widget_status_badge, View.GONE)
-                views.setViewVisibility(R.id.widget_days_unit, View.GONE)
+                views.setViewVisibility(R.id.widget_full_days_row, View.GONE)
+                views.setViewVisibility(R.id.widget_compact_days_number, View.VISIBLE)
                 views.setViewVisibility(R.id.widget_compact_unit, View.VISIBLE)
                 views.setViewVisibility(R.id.widget_subtitle, View.GONE)
                 views.setViewVisibility(R.id.widget_footer, View.GONE)
-                views.setTextViewTextSize(R.id.widget_days_number, TypedValue.COMPLEX_UNIT_SP, 28f)
-                views.setTextViewTextSize(R.id.widget_compact_unit, TypedValue.COMPLEX_UNIT_SP, 12f)
             } else {
                 val padPx = TypedValue.applyDimension(
-                    TypedValue.COMPLEX_UNIT_DIP, 20f, context.resources.displayMetrics
+                    TypedValue.COMPLEX_UNIT_DIP, 20f, metrics
                 ).toInt()
                 views.setViewPadding(R.id.widget_content, padPx, padPx, padPx, padPx)
                 views.setViewVisibility(R.id.widget_status_badge, View.VISIBLE)
-                views.setViewVisibility(R.id.widget_days_unit, View.VISIBLE)
+                views.setViewVisibility(R.id.widget_full_days_row, View.VISIBLE)
+                views.setViewVisibility(R.id.widget_compact_days_number, View.GONE)
                 views.setViewVisibility(R.id.widget_compact_unit, View.GONE)
                 views.setViewVisibility(R.id.widget_subtitle, View.VISIBLE)
                 views.setViewVisibility(R.id.widget_footer, View.VISIBLE)
@@ -283,45 +304,53 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 views.setTextViewTextSize(R.id.widget_subtitle, TypedValue.COMPLEX_UNIT_SP, 12f)
             }
 
+            val badgeText: String
+            val numberText: String
+            val unitText: String
+            val compactUnitText: String
+            val subtitleText: String
+            val footerText: String
+
             if (!model.hasData || info.daysToNextPeriod == null || info.nextPeriodDate == null) {
-                views.setTextViewText(R.id.widget_days_number, "--")
-                views.setTextViewText(R.id.widget_days_unit, "days")
-                views.setTextViewText(R.id.widget_compact_unit, "Days")
-                views.setTextViewText(R.id.widget_subtitle, "to next period")
-                views.setTextViewText(R.id.widget_footer, "Tap to log period")
+                badgeText = style.statusLabel
+                numberText = "--"
+                unitText = "days"
+                compactUnitText = "Days"
+                subtitleText = "to next period"
+                footerText = "Tap to log period"
             } else if (info.daysLate > 0) {
                 val late = info.daysLate
-                val unit = if (late == 1) "day" else "days"
-                val compactUnit = if (late == 1) "Day late" else "Days late"
-                views.setTextViewText(R.id.widget_status_badge, "Period Late")
-                views.setTextViewText(R.id.widget_days_number, late.toString())
-                views.setTextViewText(R.id.widget_days_unit, unit)
-                views.setTextViewText(R.id.widget_compact_unit, compactUnit)
-                views.setTextViewText(R.id.widget_subtitle, "late")
-                val expectedStr = info.expectedPeriodDate?.format(shortDateFmt)
-                    ?: info.nextPeriodDate.format(shortDateFmt)
-                views.setTextViewText(
-                    R.id.widget_footer,
-                    "Day ${model.averageCycleLength + late} • Expected $expectedStr"
-                )
+                badgeText = "Period Late"
+                numberText = late.toString()
+                unitText = if (late == 1) "day" else "days"
+                compactUnitText = if (late == 1) "Day late" else "Days late"
+                subtitleText = "late"
+                val expectedStr = info.expectedPeriodDate?.format(CyclePalette.SHORT_DATE_FMT)
+                    ?: info.nextPeriodDate.format(CyclePalette.SHORT_DATE_FMT)
+                footerText = "Day ${model.averageCycleLength + late} • Expected $expectedStr"
             } else {
                 val days = info.daysToNextPeriod
-                val unit = if (days == 1) "day" else "days"
-                val compactUnit = if (days == 1) "Day" else "Days"
-                views.setTextViewText(R.id.widget_days_number, days.toString())
-                views.setTextViewText(R.id.widget_days_unit, unit)
-                views.setTextViewText(R.id.widget_compact_unit, compactUnit)
-                views.setTextViewText(
-                    R.id.widget_subtitle,
-                    if (days == 0) "period expected today" else "to next period"
-                )
-                views.setTextViewText(
-                    R.id.widget_footer,
-                    "Day ${info.cycleDay} • Next ${info.nextPeriodDate.format(shortDateFmt)}"
-                )
+                badgeText = style.statusLabel
+                numberText = days.toString()
+                unitText = if (days == 1) "day" else "days"
+                compactUnitText = if (days == 1) "Day" else "Days"
+                subtitleText = if (days == 0) "period expected today" else "to next period"
+                footerText = "Day ${info.cycleDay} • Next ${info.nextPeriodDate.format(CyclePalette.SHORT_DATE_FMT)}"
+            }
+
+            views.setTextViewText(R.id.widget_status_badge, badgeText)
+            if (isCompact1x1) {
+                views.setTextViewText(R.id.widget_compact_days_number, numberText)
+                views.setTextViewText(R.id.widget_compact_unit, compactUnitText)
+            } else {
+                views.setTextViewText(R.id.widget_days_number, numberText)
+                views.setTextViewText(R.id.widget_days_unit, unitText)
+                views.setTextViewText(R.id.widget_subtitle, subtitleText)
+                views.setTextViewText(R.id.widget_footer, footerText)
             }
 
             appWidgetManager.updateAppWidget(appWidgetId, views)
+            bgBitmap.recycle()
         }
 
         private fun renderWidgetBackgroundBitmap(
@@ -329,11 +358,8 @@ class CycleWidgetProvider : AppWidgetProvider() {
             widthDp: Int,
             heightDp: Int,
             isCompact: Boolean,
-            gradStart: Int,
-            gradMid: Int,
-            gradEnd: Int,
-            periodStarts: List<LocalDate>,
-            model: CycleModel,
+            accentColor: Int,
+            cycleColors: IntArray,
             todayInfo: DayClassification
         ): Bitmap {
             val density = context.resources.displayMetrics.density
@@ -369,19 +395,32 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 cardCorner - (ringInset - cardInset)
             )
 
-            // 1. Draw diagonal gradient rounded card fill + frosted glass sheen + specular border
+            // 1. Diagonal gradient rounded card fill + frosted glass sheen + faint wave silhouette
             val cardRect = RectF(cardInset, cardInset, w - cardInset, h - cardInset)
             val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 style = Paint.Style.FILL
                 shader = LinearGradient(
                     cardRect.left, cardRect.top,
                     cardRect.right, cardRect.bottom,
-                    intArrayOf(gradStart, gradMid, gradEnd),
+                    intArrayOf(
+                        CyclePalette.ARGB_WIDGET_BG_START,
+                        CyclePalette.ARGB_WIDGET_BG_MID,
+                        CyclePalette.ARGB_WIDGET_BG_END
+                    ),
                     floatArrayOf(0f, 0.55f, 1f),
                     Shader.TileMode.CLAMP
                 )
             }
             canvas.drawRoundRect(cardRect, cardCorner, cardCorner, fillPaint)
+
+            // Subtle translucent tide silhouette clipped inside the card for visual kinship with the app
+            val cardClip = Path().apply {
+                addRoundRect(cardRect, cardCorner, cardCorner, Path.Direction.CW)
+            }
+            canvas.save()
+            canvas.clipPath(cardClip)
+            drawSubtleWaveSilhouette(canvas, cardRect, accentColor, isCompact, dp)
+            canvas.restore()
 
             // Frosted top-left glass sheen
             val sheenPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -417,53 +456,28 @@ class CycleWidgetProvider : AppWidgetProvider() {
             canvas.drawRoundRect(borderRect, cardCorner, cardCorner, glassBorderPaint)
 
             // 2. If cycle data exists, draw the cycle-colored perimeter outline starting at top-center
-            if (model.hasData && periodStarts.isNotEmpty()) {
-                val sortedStarts = periodStarts.sorted()
-                val cycleStart = sortedStarts.last()
-                val cycleLen = max(1, model.averageCycleLength)
-                val cycleColors = (0 until cycleLen).map { offset ->
-                    val dayInfo = CycleCalculator.classifyDate(
-                        date = cycleStart.plusDays(offset.toLong()),
-                        periodStarts = sortedStarts,
-                        model = model
-                    )
-                    when {
-                        dayInfo.periodStatus == PeriodStatus.LOGGED_START ||
-                            dayInfo.periodStatus == PeriodStatus.LOGGED -> COLOR_RED_PERIOD
-                        dayInfo.fertility == FertilityStatus.FERTILE -> COLOR_GREEN
-                        dayInfo.fertility == FertilityStatus.COULD_BE_FERTILE -> COLOR_YELLOW
-                        else -> COLOR_LIGHT_BLUE
-                    }
-                }
-
+            if (cycleColors.isNotEmpty()) {
                 val left = ringInset
                 val top = ringInset
                 val right = w - ringInset
                 val bottom = h - ringInset
                 val midX = w / 2f
 
+                val arcRect = RectF()
                 val perimeter = Path().apply {
                     moveTo(midX, top)
                     lineTo(right - ringCorner, top)
-                    arcTo(
-                        RectF(right - 2 * ringCorner, top, right, top + 2 * ringCorner),
-                        -90f, 90f, false
-                    )
+                    arcRect.set(right - 2 * ringCorner, top, right, top + 2 * ringCorner)
+                    arcTo(arcRect, -90f, 90f, false)
                     lineTo(right, bottom - ringCorner)
-                    arcTo(
-                        RectF(right - 2 * ringCorner, bottom - 2 * ringCorner, right, bottom),
-                        0f, 90f, false
-                    )
+                    arcRect.set(right - 2 * ringCorner, bottom - 2 * ringCorner, right, bottom)
+                    arcTo(arcRect, 0f, 90f, false)
                     lineTo(left + ringCorner, bottom)
-                    arcTo(
-                        RectF(left, bottom - 2 * ringCorner, left + 2 * ringCorner, bottom),
-                        90f, 90f, false
-                    )
+                    arcRect.set(left, bottom - 2 * ringCorner, left + 2 * ringCorner, bottom)
+                    arcTo(arcRect, 90f, 90f, false)
                     lineTo(left, top + ringCorner)
-                    arcTo(
-                        RectF(left, top, left + 2 * ringCorner, top + 2 * ringCorner),
-                        180f, 90f, false
-                    )
+                    arcRect.set(left, top, left + 2 * ringCorner, top + 2 * ringCorner)
+                    arcTo(arcRect, 180f, 90f, false)
                     lineTo(midX, top)
                 }
 
@@ -484,7 +498,7 @@ class CycleWidgetProvider : AppWidgetProvider() {
                     val dayPos = count * (step + 0.5f) / totalSteps
                     segPath.reset()
                     pm.getSegment(d0, d1, segPath, true)
-                    segPaint.color = sampleSmoothCycleColor(cycleColors, dayPos)
+                    segPaint.color = CyclePalette.sampleSmoothCycleColorArgb(cycleColors, dayPos)
                     canvas.drawPath(segPath, segPaint)
                 }
 
@@ -509,20 +523,13 @@ class CycleWidgetProvider : AppWidgetProvider() {
                     val pos = FloatArray(2)
                     pm.getPosTan(midDist, pos, null)
 
-                    val (haloColor, dotColor) = when (cycleColors[clampedIndex]) {
-                        COLOR_RED_PERIOD -> Color.parseColor("#FCA5A5") to Color.parseColor("#B91C1C")
-                        COLOR_GREEN -> Color.parseColor("#6EE7B7") to Color.parseColor("#047857")
-                        COLOR_YELLOW -> Color.parseColor("#FEF08A") to Color.parseColor("#D97706")
-                        else -> Color.parseColor("#BAE6FD") to Color.parseColor("#0284C7")
-                    }
-
+                    val packed = CyclePalette.markerColorsArgb(cycleColors[clampedIndex])
                     val markerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         style = Paint.Style.FILL
                     }
-
-                    markerPaint.color = haloColor
+                    markerPaint.color = CyclePalette.unpackHalo(packed)
                     canvas.drawCircle(pos[0], pos[1], haloR, markerPaint)
-                    markerPaint.color = dotColor
+                    markerPaint.color = CyclePalette.unpackDot(packed)
                     canvas.drawCircle(pos[0], pos[1], dotR, markerPaint)
                 }
             }
@@ -530,46 +537,67 @@ class CycleWidgetProvider : AppWidgetProvider() {
             return bitmap
         }
 
-        private fun sampleSmoothCycleColor(
-            colors: List<Int>,
-            dayPos: Float,
-            blendRadius: Float = 1.6f
-        ): Int {
-            val count = colors.size
-            if (count == 0) return Color.TRANSPARENT
-            var wSum = 0f
-            var rSum = 0f
-            var gSum = 0f
-            var bSum = 0f
-            val startIdx = max(0, (dayPos - blendRadius).toInt())
-            val endIdx = min(count - 1, (dayPos + blendRadius).toInt() + 1)
-            for (i in startIdx..endIdx) {
-                val center = i + 0.5f
-                val dist = abs(dayPos - center)
-                if (dist <= blendRadius) {
-                    val weight = 0.5f * (1f + cos((PI * dist / blendRadius).toFloat()))
-                    val c = colors[i]
-                    rSum += Color.red(c) * weight
-                    gSum += Color.green(c) * weight
-                    bSum += Color.blue(c) * weight
-                    wSum += weight
-                }
+        private fun drawSubtleWaveSilhouette(
+            canvas: Canvas,
+            cardRect: RectF,
+            accentColor: Int,
+            isCompact: Boolean,
+            dp: Float
+        ) {
+            val w = cardRect.width()
+            val h = cardRect.height()
+            if (w <= 0f || h <= 0f) return
+
+            val amp = (if (isCompact) 4.5f else 7.5f) * dp
+            val amp2 = amp * 0.45f
+            val freq1 = (2.0 * PI / (w * 0.85f)).toFloat()
+            val freq2 = (2.0 * PI / (w * 1.7f)).toFloat()
+            val stepPx = max(4f, 6f * dp)
+
+            val base1 = cardRect.top + h * 0.72f
+            val base2 = cardRect.top + h * 0.81f
+            val path1 = Path().apply { moveTo(cardRect.left, cardRect.bottom) }
+            val path2 = Path().apply { moveTo(cardRect.left, cardRect.bottom) }
+
+            var x = 0f
+            while (x < w) {
+                val sec = cos(x * freq2) * amp2
+                path1.lineTo(cardRect.left + x, base1 + sin(x * freq1 + 0.6f) * amp + sec)
+                path2.lineTo(cardRect.left + x, base2 + sin(x * freq1 + 2.4f) * amp + sec)
+                x += stepPx
             }
-            if (wSum <= 0f) return colors[dayPos.toInt().coerceIn(0, count - 1)]
-            return Color.rgb(
-                (rSum / wSum).toInt().coerceIn(0, 255),
-                (gSum / wSum).toInt().coerceIn(0, 255),
-                (bSum / wSum).toInt().coerceIn(0, 255)
-            )
+            val endSec = cos(w * freq2) * amp2
+            path1.lineTo(cardRect.right, base1 + sin(w * freq1 + 0.6f) * amp + endSec)
+            path1.lineTo(cardRect.right, cardRect.bottom)
+            path1.close()
+            path2.lineTo(cardRect.right, base2 + sin(w * freq1 + 2.4f) * amp + endSec)
+            path2.lineTo(cardRect.right, cardRect.bottom)
+            path2.close()
+
+            val wavePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+            val r = Color.red(accentColor)
+            val g = Color.green(accentColor)
+            val b = Color.blue(accentColor)
+            wavePaint.color = Color.argb(22, r, g, b)
+            canvas.drawPath(path1, wavePaint)
+            wavePaint.color = Color.argb(14, r, g, b)
+            canvas.drawPath(path2, wavePaint)
         }
 
         private data class WidgetStyle(
-            val gradStart: Int,
-            val gradMid: Int,
-            val gradEnd: Int,
             val textColor: Int,
             val footerColor: Int,
             val statusLabel: String
+        )
+
+        private class WidgetBatchData(
+            val repo: CycleRepository,
+            val today: LocalDate,
+            val model: CycleModel,
+            val info: DayClassification,
+            val cycleColors: IntArray,
+            val style: WidgetStyle,
+            val launchPendingIntent: PendingIntent
         )
     }
 }

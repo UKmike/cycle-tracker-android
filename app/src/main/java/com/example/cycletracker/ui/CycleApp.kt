@@ -2,12 +2,15 @@ package com.example.cycletracker.ui
 
 import android.Manifest
 import android.app.Activity
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContract
@@ -183,11 +186,7 @@ fun CycleApp(
         }
     }
 
-    val openDocContract = remember { ActivityResultContracts.OpenDocument() }
-    val importLauncher = rememberLauncherForActivityResult(
-        contract = openDocContract
-    ) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
+    fun importFromUri(uri: Uri) {
         val appContext = context.applicationContext
         coroutineScope.launch {
             val result = withContext(Dispatchers.IO) {
@@ -209,6 +208,53 @@ fun CycleApp(
         }
     }
 
+    val openDocContract = remember { ActivityResultContracts.OpenDocument() }
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = openDocContract
+    ) { uri ->
+        if (uri != null) importFromUri(uri)
+    }
+
+    val getContentContract = remember { ActivityResultContracts.GetContent() }
+    val fallbackImportLauncher = rememberLauncherForActivityResult(
+        contract = getContentContract
+    ) { uri ->
+        if (uri != null) importFromUri(uri)
+    }
+
+    fun exportDirectlyToDownloads(fileName: String) {
+        val appContext = context.applicationContext
+        val payload = viewModel.exportBackupJson()
+        coroutineScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        val values = ContentValues().apply {
+                            put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                            put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+                            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                        }
+                        val resolver = appContext.contentResolver
+                        val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                            ?: error("Unable to create file in Downloads.")
+                        resolver.openOutputStream(uri)?.use { out ->
+                            out.write(payload.toByteArray(Charsets.UTF_8))
+                            out.flush()
+                        } ?: error("Unable to write to Downloads.")
+                    } else {
+                        error("No file picker available on this device.")
+                    }
+                }
+            }
+            showSettingsSheet = false
+            result.onSuccess {
+                showMessage("Saved to Downloads/$fileName")
+            }.onFailure { err ->
+                showMessage("Export failed: ${err.message ?: "unknown error"}")
+            }
+        }
+    }
+
     fun launchExport() {
         val fileName = "maya-cycle-backup-${LocalDate.now()}.json"
         onLaunchExternalPicker()
@@ -216,12 +262,12 @@ fun CycleApp(
             exportLauncher.launch(fileName to "application/json")
         }
         if (launchedJson.isFailure) {
-            val launchedFallback = runCatching {
+            val launchedAny = runCatching {
                 exportLauncher.launch(fileName to "*/*")
             }
-            if (launchedFallback.isFailure) {
-                showSettingsSheet = false
-                showMessage("Unable to open file picker on this device.")
+            if (launchedAny.isFailure) {
+                // Device has no SAF document creator (e.g., disabled DocumentsUI): save straight to Downloads/
+                exportDirectlyToDownloads(fileName)
             }
         }
     }
@@ -232,8 +278,13 @@ fun CycleApp(
             importLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
         }
         if (launched.isFailure) {
-            showSettingsSheet = false
-            showMessage("Unable to open file picker on this device.")
+            val fallbackLaunched = runCatching {
+                fallbackImportLauncher.launch("*/*")
+            }
+            if (fallbackLaunched.isFailure) {
+                showSettingsSheet = false
+                showMessage("Unable to open file picker on this device.")
+            }
         }
     }
 

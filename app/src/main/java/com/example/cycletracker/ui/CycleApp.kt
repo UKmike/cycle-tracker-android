@@ -1,7 +1,17 @@
 package com.example.cycletracker.ui
 
+import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContract
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -59,31 +69,192 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.cycletracker.domain.CycleCalculator
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
+
+private enum class PendingReminderToggle {
+    NONE,
+    PERIOD,
+    FERTILE
+}
+
+/**
+ * SAF document-creation contract that explicitly includes [Intent.CATEGORY_OPENABLE]
+ * (required by many OEM DocumentsUI implementations) and supports fallback MIME types.
+ */
+private class CreateBackupDocumentContract : ActivityResultContract<Pair<String, String>, Uri?>() {
+    override fun createIntent(context: Context, input: Pair<String, String>): Intent {
+        val (fileName, mimeType) = input
+        return Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = mimeType
+            putExtra(Intent.EXTRA_TITLE, fileName)
+        }
+    }
+
+    override fun parseResult(resultCode: Int, intent: Intent?): Uri? {
+        return if (resultCode == Activity.RESULT_OK) intent?.data else null
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CycleApp(
     viewModel: CycleViewModel = viewModel(),
-    onAppLockSettingChanged: (Boolean) -> Unit = {}
+    onAppLockSettingChanged: (Boolean) -> Unit = {},
+    onLaunchExternalPicker: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     val state by viewModel.uiState.collectAsState()
     var showHistoryPage by rememberSaveable { mutableStateOf(false) }
     var showSettingsSheet by rememberSaveable { mutableStateOf(false) }
     var pendingJumpDate by remember { mutableStateOf<LocalDate?>(null) }
+    var pendingReminderToggle by remember { mutableStateOf(PendingReminderToggle.NONE) }
 
     val homeSnackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+
+    fun showMessage(msg: String) {
+        coroutineScope.launch {
+            homeSnackbarHostState.currentSnackbarData?.dismiss()
+            homeSnackbarHostState.showSnackbar(msg)
+        }
+    }
+
+    // Hoisted & remembered contracts so DisposableEffect never unregisters launchers on
+    // recomposition or when SettingsSheet is dismissed while a system picker is open.
+    val permissionContract = remember { ActivityResultContracts.RequestPermission() }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = permissionContract
+    ) { granted ->
+        val pending = pendingReminderToggle
+        pendingReminderToggle = PendingReminderToggle.NONE
+        if (granted) {
+            when (pending) {
+                PendingReminderToggle.PERIOD -> viewModel.setPeriodReminder(true)
+                PendingReminderToggle.FERTILE -> viewModel.setFertileReminder(true)
+                PendingReminderToggle.NONE -> Unit
+            }
+        } else {
+            showSettingsSheet = false
+            showMessage("Notification permission is required for reminders.")
+        }
+    }
+
+    val createDocContract = remember { CreateBackupDocumentContract() }
+    val exportLauncher = rememberLauncherForActivityResult(
+        contract = createDocContract
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val appContext = context.applicationContext
+        val payload = viewModel.exportBackupJson()
+        coroutineScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val stream = runCatching {
+                        appContext.contentResolver.openOutputStream(uri, "wt")
+                    }.getOrNull() ?: appContext.contentResolver.openOutputStream(uri)
+                        ?: error("Unable to open destination file.")
+                    stream.use { out ->
+                        out.write(payload.toByteArray(Charsets.UTF_8))
+                        out.flush()
+                    }
+                }
+            }
+            showSettingsSheet = false
+            result.onSuccess {
+                showMessage("Backup exported successfully.")
+            }.onFailure { err ->
+                showMessage("Export failed: ${err.message ?: "unknown error"}")
+            }
+        }
+    }
+
+    val openDocContract = remember { ActivityResultContracts.OpenDocument() }
+    val importLauncher = rememberLauncherForActivityResult(
+        contract = openDocContract
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val appContext = context.applicationContext
+        coroutineScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    val text = appContext.contentResolver.openInputStream(uri)
+                        ?.bufferedReader(Charsets.UTF_8)
+                        ?.use { it.readText() }
+                        ?: error("Unable to read selected file.")
+                    viewModel.importBackupJson(text).getOrThrow()
+                }
+            }
+            showSettingsSheet = false
+            result.onSuccess { count ->
+                val unit = if (count == 1) "entry" else "entries"
+                showMessage("Imported $count period $unit.")
+            }.onFailure { err ->
+                showMessage("Import failed: ${err.message ?: "invalid backup file"}")
+            }
+        }
+    }
+
+    fun launchExport() {
+        val fileName = "maya-cycle-backup-${LocalDate.now()}.json"
+        onLaunchExternalPicker()
+        val launchedJson = runCatching {
+            exportLauncher.launch(fileName to "application/json")
+        }
+        if (launchedJson.isFailure) {
+            val launchedFallback = runCatching {
+                exportLauncher.launch(fileName to "*/*")
+            }
+            if (launchedFallback.isFailure) {
+                showSettingsSheet = false
+                showMessage("Unable to open file picker on this device.")
+            }
+        }
+    }
+
+    fun launchImport() {
+        onLaunchExternalPicker()
+        val launched = runCatching {
+            importLauncher.launch(arrayOf("application/json", "text/plain", "*/*"))
+        }
+        if (launched.isFailure) {
+            showSettingsSheet = false
+            showMessage("Unable to open file picker on this device.")
+        }
+    }
+
+    fun requestNotificationThen(target: PendingReminderToggle, onGranted: () -> Unit) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            onGranted()
+        } else {
+            pendingReminderToggle = target
+            onLaunchExternalPicker()
+            runCatching {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }.onFailure {
+                pendingReminderToggle = PendingReminderToggle.NONE
+                showSettingsSheet = false
+                showMessage("Unable to request notification permission.")
+            }
+        }
+    }
 
     // Live midnight rollover refresh whenever the user resumes Maya on a new calendar day
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -156,20 +327,30 @@ fun CycleApp(
         SettingsSheet(
             settings = state.settings,
             onUpdatePeriodLength = viewModel::updatePeriodLength,
-            onSetPeriodReminder = viewModel::setPeriodReminder,
-            onSetFertileReminder = viewModel::setFertileReminder,
+            onTogglePeriodReminder = { enabled, daysBefore ->
+                if (enabled) {
+                    requestNotificationThen(PendingReminderToggle.PERIOD) {
+                        viewModel.setPeriodReminder(true, daysBefore)
+                    }
+                } else {
+                    viewModel.setPeriodReminder(false, daysBefore)
+                }
+            },
+            onToggleFertileReminder = { enabled ->
+                if (enabled) {
+                    requestNotificationThen(PendingReminderToggle.FERTILE) {
+                        viewModel.setFertileReminder(true)
+                    }
+                } else {
+                    viewModel.setFertileReminder(false)
+                }
+            },
             onSetAppLockEnabled = { enabled ->
                 viewModel.setAppLockEnabled(enabled)
                 onAppLockSettingChanged(enabled)
             },
-            onExportJson = viewModel::exportBackupJson,
-            onImportJson = viewModel::importBackupJson,
-            onShowMessage = { msg ->
-                coroutineScope.launch {
-                    homeSnackbarHostState.currentSnackbarData?.dismiss()
-                    homeSnackbarHostState.showSnackbar(msg)
-                }
-            },
+            onExportClick = ::launchExport,
+            onImportClick = ::launchImport,
             onDismiss = { showSettingsSheet = false }
         )
     }

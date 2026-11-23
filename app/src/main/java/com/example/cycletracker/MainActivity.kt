@@ -85,6 +85,7 @@ class MainActivity : FragmentActivity() {
     private var appLockEnabled by mutableStateOf(false)
     private var isLocked by mutableStateOf(false)
     private var promptInFlight = false
+    private var suppressNextAutoLock = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -127,6 +128,9 @@ class MainActivity : FragmentActivity() {
                             appLockEnabled = enabled
                             applySecureWindowFlag(enabled)
                             if (!enabled) isLocked = false
+                        },
+                        onLaunchExternalPicker = {
+                            suppressNextAutoLock = true
                         }
                     )
                 }
@@ -141,6 +145,10 @@ class MainActivity : FragmentActivity() {
 
     override fun onStop() {
         super.onStop()
+        if (suppressNextAutoLock) {
+            suppressNextAutoLock = false
+            return
+        }
         // Re-lock only when backgrounded, not on orientation/configuration changes
         if (appLockEnabled && !isChangingConfigurations) {
             isLocked = true

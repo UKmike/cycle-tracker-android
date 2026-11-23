@@ -11,7 +11,6 @@ import android.graphics.RectF
 import android.graphics.SweepGradient
 import android.provider.Settings
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -93,7 +92,6 @@ private val CardBorderBrush = Brush.linearGradient(
         Color.White.copy(alpha = 0.12f)
     )
 )
-private val GravityDescentEasing = CubicBezierEasing(0.32f, 0f, 0.85f, 0.36f)
 private val ZeroFloatProvider: () -> Float = { 0f }
 
 private val HeroCountStyle = TextStyle(
@@ -262,7 +260,7 @@ internal fun HomeWidgetPreviewCard(
     }
 
     val jumpScope = rememberCoroutineScope()
-    val jumpOffsetFraction = remember { Animatable(0f) }
+    val jumpProgress = remember { Animatable(0f) }
     val landingSplash = remember { Animatable(0f) }
     var jumpJob by remember { mutableStateOf<Job?>(null) }
 
@@ -272,7 +270,7 @@ internal fun HomeWidgetPreviewCard(
         reducedMotion,
         primaryPhaseProvider,
         secondaryPhaseProvider,
-        jumpOffsetFraction
+        jumpProgress
     ) {
         val dotAngle1 = (2.0 * PI * (0.78 / 0.72)).toFloat()
         val dotAngle2 = (2.0 * PI * (0.78 / 1.44)).toFloat()
@@ -284,7 +282,9 @@ internal fun HomeWidgetPreviewCard(
                 val c = cos((dotAngle2 - secondaryPhaseProvider()).toDouble()).toFloat()
                 val rawNorm = (s + 0.45f * c) / 1.45f
                 val waveHeight = ((1f - rawNorm) * 0.5f).coerceIn(0f, 1f)
-                (waveHeight + jumpOffsetFraction.value * 0.65f).coerceIn(0f, 1f)
+                val t = jumpProgress.value.coerceIn(0f, 1f)
+                val jumpHeight = 4f * t * (1f - t)
+                (waveHeight + jumpHeight * 0.65f).coerceIn(0f, 1f)
             }
         }
         provider
@@ -302,20 +302,16 @@ internal fun HomeWidgetPreviewCard(
                 jumpJob?.cancel()
                 jumpJob = jumpScope.launch {
                     landingSplash.snapTo(0f)
-                    jumpOffsetFraction.animateTo(
+                    jumpProgress.snapTo(0f)
+                    // Continuous ballistic flight: 0 (takeoff) -> 0.5 (apex) -> 1 (touchdown)
+                    jumpProgress.animateTo(
                         targetValue = 1f,
                         animationSpec = tween(
-                            durationMillis = 320,
-                            easing = FastOutSlowInEasing
+                            durationMillis = 660,
+                            easing = LinearEasing
                         )
                     )
-                    jumpOffsetFraction.animateTo(
-                        targetValue = 0f,
-                        animationSpec = tween(
-                            durationMillis = 340,
-                            easing = GravityDescentEasing
-                        )
-                    )
+                    jumpProgress.snapTo(0f)
                     landingSplash.snapTo(0.01f)
                     landingSplash.animateTo(
                         targetValue = 1f,
@@ -399,7 +395,7 @@ internal fun HomeWidgetPreviewCard(
                 contentColor = contentColor,
                 primaryPhase = primaryPhaseProvider,
                 secondaryPhase = secondaryPhaseProvider,
-                jumpHeightFraction = { jumpOffsetFraction.value },
+                jumpProgress = { jumpProgress.value },
                 landingSplash = { landingSplash.value },
                 modifier = Modifier.matchParentSize()
             )
@@ -773,7 +769,7 @@ private fun FlowingCycleTideOverlay(
     contentColor: Color,
     primaryPhase: () -> Float,
     secondaryPhase: () -> Float,
-    jumpHeightFraction: () -> Float,
+    jumpProgress: () -> Float,
     landingSplash: () -> Float,
     modifier: Modifier = Modifier
 ) {
@@ -840,7 +836,8 @@ private fun FlowingCycleTideOverlay(
                     sin(dotX * freq1 + p1) * amp +
                     cos(dotX * freq2 - p2) * amp2
                 val maxJumpPx = (waveSurfaceY - topMarginPx).coerceIn(minJumpPx, maxJumpCapPx)
-                val j = jumpHeightFraction().coerceIn(0f, 1f)
+                val t = jumpProgress().coerceIn(0f, 1f)
+                val j = 4f * t * (1f - t)
                 val dotY = waveSurfaceY - j * maxJumpPx
 
                 val splash = landingSplash()
@@ -853,13 +850,23 @@ private fun FlowingCycleTideOverlay(
                     )
                 }
 
-                if (j > 0.02f) {
+                // Parabolic comet trail tracing the dot's recent arc:
+                // bottom-left on takeoff -> horizontal-left at peak -> top-left on descent
+                if (t > 0.01f && t < 0.99f) {
+                    val landingFade = ((1f - t) / 0.10f).coerceIn(0f, 1f)
+                    val dtStep = 0.052f
+                    val dxStepPx = 6.0f * dp1
                     for (i in 1..3) {
+                        val tTrail = t - i * dtStep
+                        if (tTrail <= 0f) continue
+                        val jTrail = 4f * tTrail * (1f - tTrail)
+                        val trailX = dotX - i * dxStepPx
+                        val trailY = waveSurfaceY - jTrail * maxJumpPx
                         val frac = i / 3f
-                        val trailX = dotX - (i * 5.5f * j) * dp1
-                        val trailY = dotY + (i * 4.5f * j) * dp1
+                        val entryFade = (tTrail / 0.05f).coerceIn(0f, 1f)
+                        val alpha = 0.38f * (1f - frac * 0.65f) * entryFade * landingFade
                         drawCircle(
-                            color = contentColor.copy(alpha = (0.36f * (1f - frac * 0.7f)) * j),
+                            color = contentColor.copy(alpha = alpha),
                             radius = (3.4f - i * 0.7f) * dp1,
                             center = Offset(trailX, trailY)
                         )

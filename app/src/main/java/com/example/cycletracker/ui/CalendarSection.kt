@@ -130,7 +130,7 @@ internal fun CalendarCard(
     isCompactLandscape: Boolean = false
 ) {
     val currentMonth = remember(today) { YearMonth.from(today) }
-    val monthsPast = 120
+    val monthsPast = 180
     val monthsFuture = 12
     val months = remember(currentMonth) {
         (-monthsPast..monthsFuture).map { offset -> currentMonth.plusMonths(offset.toLong()) }

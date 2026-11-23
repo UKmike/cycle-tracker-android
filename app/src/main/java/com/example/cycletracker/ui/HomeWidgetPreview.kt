@@ -11,6 +11,7 @@ import android.graphics.RectF
 import android.graphics.SweepGradient
 import android.provider.Settings
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -92,6 +93,7 @@ private val CardBorderBrush = Brush.linearGradient(
         Color.White.copy(alpha = 0.12f)
     )
 )
+private val GravityDescentEasing = CubicBezierEasing(0.32f, 0f, 0.85f, 0.36f)
 private val ZeroFloatProvider: () -> Float = { 0f }
 
 private val HeroCountStyle = TextStyle(
@@ -260,7 +262,7 @@ internal fun HomeWidgetPreviewCard(
     }
 
     val jumpScope = rememberCoroutineScope()
-    val jumpProgress = remember { Animatable(0f) }
+    val jumpOffsetFraction = remember { Animatable(0f) }
     val landingSplash = remember { Animatable(0f) }
     var jumpJob by remember { mutableStateOf<Job?>(null) }
 
@@ -270,7 +272,7 @@ internal fun HomeWidgetPreviewCard(
         reducedMotion,
         primaryPhaseProvider,
         secondaryPhaseProvider,
-        jumpProgress
+        jumpOffsetFraction
     ) {
         val dotAngle1 = (2.0 * PI * (0.78 / 0.72)).toFloat()
         val dotAngle2 = (2.0 * PI * (0.78 / 1.44)).toFloat()
@@ -282,9 +284,7 @@ internal fun HomeWidgetPreviewCard(
                 val c = cos((dotAngle2 - secondaryPhaseProvider()).toDouble()).toFloat()
                 val rawNorm = (s + 0.45f * c) / 1.45f
                 val waveHeight = ((1f - rawNorm) * 0.5f).coerceIn(0f, 1f)
-                val t = jumpProgress.value.coerceIn(0f, 1f)
-                val jumpHeight = 4f * t * (1f - t)
-                (waveHeight + jumpHeight * 0.65f).coerceIn(0f, 1f)
+                (waveHeight + jumpOffsetFraction.value * 0.65f).coerceIn(0f, 1f)
             }
         }
         provider
@@ -302,16 +302,21 @@ internal fun HomeWidgetPreviewCard(
                 jumpJob?.cancel()
                 jumpJob = jumpScope.launch {
                     landingSplash.snapTo(0f)
-                    jumpProgress.snapTo(0f)
-                    // Continuous ballistic flight: 0 (takeoff) -> 0.5 (apex) -> 1 (touchdown)
-                    jumpProgress.animateTo(
+                    // Launch or boost smoothly from current airborne height
+                    jumpOffsetFraction.animateTo(
                         targetValue = 1f,
                         animationSpec = tween(
-                            durationMillis = 660,
-                            easing = LinearEasing
+                            durationMillis = 320,
+                            easing = FastOutSlowInEasing
                         )
                     )
-                    jumpProgress.snapTo(0f)
+                    jumpOffsetFraction.animateTo(
+                        targetValue = 0f,
+                        animationSpec = tween(
+                            durationMillis = 340,
+                            easing = GravityDescentEasing
+                        )
+                    )
                     landingSplash.snapTo(0.01f)
                     landingSplash.animateTo(
                         targetValue = 1f,
@@ -395,7 +400,7 @@ internal fun HomeWidgetPreviewCard(
                 contentColor = contentColor,
                 primaryPhase = primaryPhaseProvider,
                 secondaryPhase = secondaryPhaseProvider,
-                jumpProgress = { jumpProgress.value },
+                jumpHeightFraction = { jumpOffsetFraction.value },
                 landingSplash = { landingSplash.value },
                 modifier = Modifier.matchParentSize()
             )
@@ -769,7 +774,7 @@ private fun FlowingCycleTideOverlay(
     contentColor: Color,
     primaryPhase: () -> Float,
     secondaryPhase: () -> Float,
-    jumpProgress: () -> Float,
+    jumpHeightFraction: () -> Float,
     landingSplash: () -> Float,
     modifier: Modifier = Modifier
 ) {
@@ -796,9 +801,18 @@ private fun FlowingCycleTideOverlay(
             val maxJumpCapPx = 54.dp.toPx()
             val dp1 = 1.dp.toPx()
             val dotCoreRadius = 4.dp.toPx()
+            val dxStepPx = 6.0f * dp1
 
             val wavePath1 = Path()
             val wavePath2 = Path()
+
+            // Zero-allocation circular buffer of recent airborne (timestampNs, jumpHeight) samples
+            // so the trail follows the true trajectory across 60/90/120 Hz and mid-air boosts.
+            val histCap = 32
+            val histTimeNs = LongArray(histCap)
+            val histHeight = FloatArray(histCap)
+            var histHead = 0
+            var histCount = 0
 
             onDrawBehind {
                 val p1 = primaryPhase()
@@ -831,13 +845,12 @@ private fun FlowingCycleTideOverlay(
                 drawPath(path = wavePath1, color = layer1Color)
                 drawPath(path = wavePath2, color = layer2Color)
 
-                // Glowing crest dot riding the top wave (launches into a parabolic jump when tapped)
+                // Glowing crest dot riding the top wave (launches or boosts smoothly when tapped)
                 val waveSurfaceY = baseY1 +
                     sin(dotX * freq1 + p1) * amp +
                     cos(dotX * freq2 - p2) * amp2
                 val maxJumpPx = (waveSurfaceY - topMarginPx).coerceIn(minJumpPx, maxJumpCapPx)
-                val t = jumpProgress().coerceIn(0f, 1f)
-                val j = 4f * t * (1f - t)
+                val j = jumpHeightFraction().coerceIn(0f, 1f)
                 val dotY = waveSurfaceY - j * maxJumpPx
 
                 val splash = landingSplash()
@@ -850,27 +863,57 @@ private fun FlowingCycleTideOverlay(
                     )
                 }
 
-                // Parabolic comet trail tracing the dot's recent arc:
-                // bottom-left on takeoff -> horizontal-left at peak -> top-left on descent
-                if (t > 0.01f && t < 0.99f) {
-                    val landingFade = ((1f - t) / 0.10f).coerceIn(0f, 1f)
-                    val dtStep = 0.052f
-                    val dxStepPx = 6.0f * dp1
-                    for (i in 1..3) {
-                        val tTrail = t - i * dtStep
-                        if (tTrail <= 0f) continue
-                        val jTrail = 4f * tTrail * (1f - tTrail)
-                        val trailX = dotX - i * dxStepPx
-                        val trailY = waveSurfaceY - jTrail * maxJumpPx
-                        val frac = i / 3f
-                        val entryFade = (tTrail / 0.05f).coerceIn(0f, 1f)
-                        val alpha = 0.38f * (1f - frac * 0.65f) * entryFade * landingFade
-                        drawCircle(
-                            color = contentColor.copy(alpha = alpha),
-                            radius = (3.4f - i * 0.7f) * dp1,
-                            center = Offset(trailX, trailY)
-                        )
+                // True-trajectory comet trail: bottom-left on takeoff -> horizontal-left at peak ->
+                // top-left on descent, and curves naturally through mid-air boost re-launches.
+                if (j > 0.005f) {
+                    val nowNs = System.nanoTime()
+                    val lastIdx = (histHead - 1 + histCap) % histCap
+                    if (histCount == 0 || nowNs - histTimeNs[lastIdx] >= 2_000_000L) {
+                        histTimeNs[histHead] = nowNs
+                        histHeight[histHead] = j
+                        histHead = (histHead + 1) % histCap
+                        if (histCount < histCap) histCount++
                     }
+
+                    if (histCount >= 2) {
+                        val oldestIdx = (histHead - histCount + histCap) % histCap
+                        val oldestNs = histTimeNs[oldestIdx]
+                        val edgeFade = (j / 0.14f).coerceIn(0f, 1f)
+                        val dtStepNs = 34_000_000L
+
+                        for (i in 1..3) {
+                            val targetNs = nowNs - i * dtStepNs
+                            if (targetNs < oldestNs) continue
+
+                            // Find bracketing samples around targetNs
+                            var jTrail = histHeight[oldestIdx]
+                            for (k in 1 until histCount) {
+                                val idxB = (histHead - k + histCap) % histCap
+                                val idxA = (histHead - k - 1 + histCap) % histCap
+                                val tB = histTimeNs[idxB]
+                                val tA = histTimeNs[idxA]
+                                if (targetNs in tA..tB) {
+                                    val span = (tB - tA).coerceAtLeast(1L)
+                                    val fracT = (targetNs - tA).toFloat() / span.toFloat()
+                                    jTrail = lerpFloat(histHeight[idxA], histHeight[idxB], fracT)
+                                    break
+                                }
+                            }
+
+                            val trailX = dotX - i * dxStepPx
+                            val trailY = waveSurfaceY - jTrail * maxJumpPx
+                            val frac = i / 3f
+                            val entryFade = ((targetNs - oldestNs) / 28_000_000f).coerceIn(0f, 1f)
+                            val alpha = 0.38f * (1f - frac * 0.65f) * entryFade * edgeFade
+                            drawCircle(
+                                color = contentColor.copy(alpha = alpha),
+                                radius = (3.4f - i * 0.7f) * dp1,
+                                center = Offset(trailX, trailY)
+                            )
+                        }
+                    }
+                } else {
+                    histCount = 0
                 }
 
                 drawCircle(

@@ -159,7 +159,8 @@ internal fun HistoryScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .padding(start = 16.dp, end = 16.dp, top = 4.dp),
+                    .navigationBarsPadding()
+                    .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 10.dp),
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 CycleLengthGraphCard(
@@ -192,7 +193,8 @@ internal fun HistoryScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .padding(start = 16.dp, end = 16.dp, top = 4.dp),
+                    .navigationBarsPadding()
+                    .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 CycleLengthGraphCard(
@@ -262,7 +264,7 @@ private fun CycleLengthGraphCard(
         )
     ) {
         Column(
-            modifier = (if (fillHeight) Modifier.fillMaxSize().navigationBarsPadding() else Modifier.fillMaxWidth())
+            modifier = (if (fillHeight) Modifier.fillMaxSize() else Modifier.fillMaxWidth())
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -420,7 +422,8 @@ private fun CycleLengthGraphCard(
                                     measured to Offset(lx, ly)
                                 }
 
-                                // Inline "Avg 28d" pill badge on the dashed average reference line
+                                // Inline "Avg 28d" pill badge on the dashed average reference line,
+                                // positioned dynamically to avoid overlapping any data point or label.
                                 val avgPillText = textMeasurer.measure(
                                     text = "Avg ${model.averageCycleLength}d",
                                     style = avgPillStyle
@@ -429,10 +432,87 @@ private fun CycleLengthGraphCard(
                                 val pillPadV = 2.dp.toPx()
                                 val pillW = avgPillText.size.width + pillPadH * 2f
                                 val pillH = avgPillText.size.height + pillPadV * 2f
-                                val pillLeft = (size.width - pillW - 2.dp.toPx()).coerceAtLeast(0f)
-                                val pillTop = (avgY - pillH / 2f).coerceIn(0f, (size.height - pillH).coerceAtLeast(0f))
+                                val canvasW = size.width
+                                val canvasH = size.height
+                                val pillMarginX = 2.dp.toPx()
+                                val maxPillLeft = (canvasW - pillW - pillMarginX).coerceAtLeast(0f)
+                                val maxPillTop = (canvasH - pillH).coerceAtLeast(0f)
+
+                                val candidateXs = buildList {
+                                    add(maxPillLeft)
+                                    add(pillMarginX.coerceAtMost(maxPillLeft))
+                                    add(((canvasW - pillW) / 2f).coerceIn(pillMarginX, maxPillLeft))
+                                    for (i in 0 until points.size - 1) {
+                                        val midX = (points[i].x + points[i + 1].x) / 2f - pillW / 2f
+                                        add(midX.coerceIn(pillMarginX, maxPillLeft))
+                                    }
+                                }
+                                val candidateYs = listOf(
+                                    (avgY - pillH / 2f).coerceIn(0f, maxPillTop),
+                                    (avgY - pillH - 3.dp.toPx()).coerceIn(0f, maxPillTop),
+                                    (avgY + 3.dp.toPx()).coerceIn(0f, maxPillTop)
+                                )
+
+                                fun clearanceFor(left: Float, top: Float): Float {
+                                    val right = left + pillW
+                                    val bottom = top + pillH
+                                    var minGap = Float.MAX_VALUE
+                                    for (idx in points.indices) {
+                                        val pt = points[idx]
+                                        val r = if (idx == points.lastIndex) latestHaloR else dotOuterR
+                                        val dx = when {
+                                            pt.x < left -> left - pt.x
+                                            pt.x > right -> pt.x - right
+                                            else -> 0f
+                                        }
+                                        val dy = when {
+                                            pt.y < top -> top - pt.y
+                                            pt.y > bottom -> pt.y - bottom
+                                            else -> 0f
+                                        }
+                                        val distToDot = kotlin.math.hypot(dx, dy) - r
+                                        if (distToDot < minGap) minGap = distToDot
+
+                                        val (lbl, lblPos) = placedLabels[idx]
+                                        val lblRight = lblPos.x + lbl.size.width
+                                        val lblBottom = lblPos.y + lbl.size.height
+                                        val ldx = maxOf(0f, maxOf(left - lblRight, lblPos.x - right))
+                                        val ldy = maxOf(0f, maxOf(top - lblBottom, lblPos.y - bottom))
+                                        val distToLbl = if (ldx == 0f && ldy == 0f) {
+                                            -minOf(
+                                                minOf(right, lblRight) - maxOf(left, lblPos.x),
+                                                minOf(bottom, lblBottom) - maxOf(top, lblPos.y)
+                                            )
+                                        } else {
+                                            kotlin.math.hypot(ldx, ldy)
+                                        }
+                                        if (distToLbl < minGap) minGap = distToLbl
+                                    }
+                                    return minGap
+                                }
+
+                                var bestLeft = maxPillLeft
+                                var bestTop = candidateYs.first()
+                                var bestScore = Float.NEGATIVE_INFINITY
+                                for ((yIdx, cy) in candidateYs.withIndex()) {
+                                    // Slightly prefer staying centered on the dashed line (yIdx == 0)
+                                    val yBias = if (yIdx == 0) 3.dp.toPx() else 0f
+                                    for (cx in candidateXs) {
+                                        val score = clearanceFor(cx, cy) + yBias
+                                        if (score > bestScore) {
+                                            bestScore = score
+                                            bestLeft = cx
+                                            bestTop = cy
+                                        }
+                                    }
+                                }
+
+                                val pillLeft = bestLeft
+                                val pillTop = bestTop
+                                val pillRight = pillLeft + pillW
+                                val pillCenteredOnLine = abs((pillTop + pillH / 2f) - avgY) < pillH * 0.6f
                                 val pillRadius = CornerRadius(pillH / 2f, pillH / 2f)
-                                val avgPillBg = CyclePalette.RedPeriod.copy(alpha = 0.85f)
+                                val avgPillBg = CyclePalette.RedPeriod.copy(alpha = 0.90f)
 
                                 onDrawBehind {
                                     for (gy in gridYs) {
@@ -444,30 +524,39 @@ private fun CycleLengthGraphCard(
                                         )
                                     }
 
-                                    drawLine(
-                                        color = avgColor,
-                                        start = Offset(0f, avgY),
-                                        end = Offset((pillLeft - 4f).coerceAtLeast(0f), avgY),
-                                        strokeWidth = avgStroke,
-                                        pathEffect = avgDash
-                                    )
+                                    if (pillCenteredOnLine) {
+                                        if (pillLeft > 4f) {
+                                            drawLine(
+                                                color = avgColor,
+                                                start = Offset(0f, avgY),
+                                                end = Offset((pillLeft - 4f).coerceAtLeast(0f), avgY),
+                                                strokeWidth = avgStroke,
+                                                pathEffect = avgDash
+                                            )
+                                        }
+                                        if (pillRight + 4f < size.width) {
+                                            drawLine(
+                                                color = avgColor,
+                                                start = Offset(pillRight + 4f, avgY),
+                                                end = Offset(size.width, avgY),
+                                                strokeWidth = avgStroke,
+                                                pathEffect = avgDash
+                                            )
+                                        }
+                                    } else {
+                                        drawLine(
+                                            color = avgColor,
+                                            start = Offset(0f, avgY),
+                                            end = Offset(size.width, avgY),
+                                            strokeWidth = avgStroke,
+                                            pathEffect = avgDash
+                                        )
+                                    }
 
                                     if (linePath != null && fillPath != null && fillBrush != null) {
                                         drawPath(path = fillPath, brush = fillBrush)
                                         drawPath(path = linePath, color = CyclePalette.RedPeriod, style = lineStroke)
                                     }
-
-                                    // Inline Avg pill
-                                    drawRoundRect(
-                                        color = avgPillBg,
-                                        topLeft = Offset(pillLeft, pillTop),
-                                        size = Size(pillW, pillH),
-                                        cornerRadius = pillRadius
-                                    )
-                                    drawText(
-                                        textLayoutResult = avgPillText,
-                                        topLeft = Offset(pillLeft + pillPadH, pillTop + pillPadV)
-                                    )
 
                                     points.forEachIndexed { idx, pt ->
                                         if (idx == points.lastIndex) {
@@ -482,6 +571,18 @@ private fun CycleLengthGraphCard(
                                         val (measured, offset) = placedLabels[idx]
                                         drawText(textLayoutResult = measured, topLeft = offset)
                                     }
+
+                                    // Draw Avg pill last so it is always legible and never obscured
+                                    drawRoundRect(
+                                        color = avgPillBg,
+                                        topLeft = Offset(pillLeft, pillTop),
+                                        size = Size(pillW, pillH),
+                                        cornerRadius = pillRadius
+                                    )
+                                    drawText(
+                                        textLayoutResult = avgPillText,
+                                        topLeft = Offset(pillLeft + pillPadH, pillTop + pillPadV)
+                                    )
                                 }
                             }
                     )
@@ -765,12 +866,11 @@ private fun HistoryCard(
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-                    contentPadding = PaddingValues(bottom = navBarBottom + 8.dp)
+                    contentPadding = PaddingValues(bottom = 8.dp)
                 ) {
                     itemsIndexed(
                         items = sortedDesc,

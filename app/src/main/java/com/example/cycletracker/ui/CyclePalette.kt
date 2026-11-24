@@ -3,8 +3,11 @@ package com.example.cycletracker.ui
 import androidx.compose.ui.graphics.Color
 import com.example.cycletracker.domain.CycleCalculator
 import com.example.cycletracker.domain.CycleModel
+import com.example.cycletracker.domain.DayClassification
 import com.example.cycletracker.domain.FertilityStatus
 import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import kotlin.math.PI
 import kotlin.math.abs
@@ -95,7 +98,114 @@ object CyclePalette {
         }
     }
 
-    fun markerColorsArgb(phaseArgb: Int): Long {
+    enum class VisualStage {
+        LOGGED_PERIOD,
+        PREDICTED_PERIOD,
+        FERTILE,
+        COULD_BE_FERTILE,
+        NOT_FERTILE
+    }
+
+    fun visualStage(info: DayClassification): VisualStage = when {
+        info.isLoggedPeriod -> VisualStage.LOGGED_PERIOD
+        info.isPredictedPeriod -> VisualStage.PREDICTED_PERIOD
+        info.fertility == FertilityStatus.FERTILE -> VisualStage.FERTILE
+        info.fertility == FertilityStatus.COULD_BE_FERTILE -> VisualStage.COULD_BE_FERTILE
+        else -> VisualStage.NOT_FERTILE
+    }
+
+    data class MidStageTransition(
+        val partnerInfo: DayClassification,
+        /** -1 when blending with yesterday (00:00..11:59), +1 when blending with tomorrow (12:00..23:59). */
+        val dayDirection: Int
+    )
+
+    /**
+     * True when [dayBefore] transitions smoothly into a different visual stage on [dayAfter],
+     * matching the faded calendar boundaries (skipping the sharp non-period -> period boundary).
+     */
+    fun hasSmoothStageTransition(
+        dayBefore: DayClassification,
+        dayAfter: DayClassification
+    ): Boolean {
+        if (visualStage(dayBefore) == visualStage(dayAfter)) return false
+        if (!dayBefore.isAnyPeriod && dayAfter.isAnyPeriod) return false
+        return true
+    }
+
+    /**
+     * Resolves the active mid-stage transition for [todayInfo] at [nowTime]:
+     * - 00:00..11:59 on the day after a smooth transition -> blends with [yesterdayInfo] (-1)
+     * - 12:00..23:59 on the day before a smooth transition -> blends with [tomorrowInfo] (+1)
+     */
+    fun resolveMidStageTransition(
+        yesterdayInfo: DayClassification,
+        todayInfo: DayClassification,
+        tomorrowInfo: DayClassification,
+        hasData: Boolean,
+        nowTime: LocalTime = LocalTime.now()
+    ): MidStageTransition? {
+        if (!hasData) return null
+        val afterNoon = !nowTime.isBefore(LocalTime.NOON)
+        return when {
+            !afterNoon && hasSmoothStageTransition(yesterdayInfo, todayInfo) ->
+                MidStageTransition(partnerInfo = yesterdayInfo, dayDirection = -1)
+            afterNoon && hasSmoothStageTransition(todayInfo, tomorrowInfo) ->
+                MidStageTransition(partnerInfo = tomorrowInfo, dayDirection = +1)
+            else -> null
+        }
+    }
+
+    /**
+     * True when today requires a 12:00 PM refresh (either leaving an incoming morning mid-stage
+     * or entering an outgoing afternoon mid-stage).
+     */
+    fun needsMiddayRefresh(
+        yesterdayInfo: DayClassification,
+        todayInfo: DayClassification,
+        tomorrowInfo: DayClassification,
+        hasData: Boolean
+    ): Boolean {
+        if (!hasData) return false
+        return hasSmoothStageTransition(yesterdayInfo, todayInfo) ||
+            hasSmoothStageTransition(todayInfo, tomorrowInfo)
+    }
+
+    /**
+     * Computes the next refresh epoch millis: today at 12:00 PM if [needsMiddayRefreshToday] is true
+     * and it is currently before midday; otherwise tomorrow at 00:00 AM.
+     */
+    fun computeNextRefreshMillis(
+        needsMiddayRefreshToday: Boolean,
+        now: ZonedDateTime = ZonedDateTime.now()
+    ): Long {
+        val target = if (needsMiddayRefreshToday && now.toLocalTime().isBefore(LocalTime.NOON)) {
+            now.toLocalDate().atTime(LocalTime.NOON).atZone(now.zone)
+        } else {
+            now.toLocalDate().plusDays(1).atStartOfDay(now.zone)
+        }
+        return target.toInstant().toEpochMilli()
+    }
+
+    fun blendArgb(a: Int, b: Int, t: Float = 0.5f): Int {
+        val inv = 1f - t
+        val alpha = (((a ushr 24) and 0xFF) * inv + ((b ushr 24) and 0xFF) * t).roundToInt().coerceIn(0, 255)
+        val r = (((a ushr 16) and 0xFF) * inv + ((b ushr 16) and 0xFF) * t).roundToInt().coerceIn(0, 255)
+        val g = (((a ushr 8) and 0xFF) * inv + ((b ushr 8) and 0xFF) * t).roundToInt().coerceIn(0, 255)
+        val bl = ((a and 0xFF) * inv + (b and 0xFF) * t).roundToInt().coerceIn(0, 255)
+        return (alpha shl 24) or (r shl 16) or (g shl 8) or bl
+    }
+
+    fun markerColorsArgb(phaseArgb: Int, nextPhaseArgb: Int? = null): Long {
+        val base = singleMarkerColorsArgb(phaseArgb)
+        if (nextPhaseArgb == null || nextPhaseArgb == phaseArgb) return base
+        val next = singleMarkerColorsArgb(nextPhaseArgb)
+        val halo = blendArgb(unpackHalo(base), unpackHalo(next), 0.5f)
+        val dot = blendArgb(unpackDot(base), unpackDot(next), 0.5f)
+        return (halo.toLong() shl 32) or (dot.toLong() and 0xFFFFFFFFL)
+    }
+
+    private fun singleMarkerColorsArgb(phaseArgb: Int): Long {
         val halo: Int
         val dot: Int
         when (phaseArgb) {

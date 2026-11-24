@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -164,45 +165,39 @@ internal fun MayaLogo(modifier: Modifier = Modifier) {
     )
 }
 
+private fun heroThemeFor(info: DayClassification): Triple<List<Color>, Color, String> = when {
+    info.isLoggedPeriod -> Triple(PeriodGradColors, Color.White, "Period")
+    info.isPredictedPeriod -> Triple(LikelyPeriodGradColors, Color(0xFF7F1D1D), "Likely Period")
+    info.fertility == FertilityStatus.FERTILE -> Triple(FertileGradColors, Color.White, "Fertile")
+    info.fertility == FertilityStatus.COULD_BE_FERTILE -> Triple(CouldBeGradColors, Color(0xFF451A03), "Could Be Fertile")
+    else -> Triple(NotFertileGradColors, Color(0xFF082F49), "Not Fertile")
+}
+
 @Composable
 internal fun HomeWidgetPreviewCard(
     todayInfo: DayClassification,
+    midStageTransition: CyclePalette.MidStageTransition?,
     hasData: Boolean,
     periodStarts: List<LocalDate>,
     model: CycleModel,
     periodLength: Int,
     modifier: Modifier = Modifier
 ) {
+    val (todayGradColors, todayContentColor, statusText) = heroThemeFor(todayInfo)
     val gradColors: List<Color>
     val contentColor: Color
-    val statusText: String
 
-    when {
-        todayInfo.isLoggedPeriod -> {
-            gradColors = PeriodGradColors
-            contentColor = Color.White
-            statusText = "Period"
+    if (midStageTransition != null) {
+        val (partnerGradColors, _, _) = heroThemeFor(midStageTransition.partnerInfo)
+        gradColors = remember(todayGradColors, partnerGradColors) {
+            List(todayGradColors.size) { i ->
+                Color(CyclePalette.blendArgb(todayGradColors[i].toArgb(), partnerGradColors[i].toArgb(), 0.5f))
+            }
         }
-        todayInfo.isPredictedPeriod -> {
-            gradColors = LikelyPeriodGradColors
-            contentColor = Color(0xFF7F1D1D)
-            statusText = "Likely Period"
-        }
-        todayInfo.fertility == FertilityStatus.FERTILE -> {
-            gradColors = FertileGradColors
-            contentColor = Color.White
-            statusText = "Fertile"
-        }
-        todayInfo.fertility == FertilityStatus.COULD_BE_FERTILE -> {
-            gradColors = CouldBeGradColors
-            contentColor = Color(0xFF451A03)
-            statusText = "Could Be Fertile"
-        }
-        else -> {
-            gradColors = NotFertileGradColors
-            contentColor = Color(0xFF082F49)
-            statusText = "Not Fertile"
-        }
+        contentColor = if (gradColors[1].luminance() > 0.26f) Color(0xFF111827) else Color.White
+    } else {
+        gradColors = todayGradColors
+        contentColor = todayContentColor
     }
 
     val cardBgBrush = remember(gradColors) { Brush.linearGradient(colors = gradColors) }
@@ -601,14 +596,26 @@ internal fun HomeWidgetPreviewCard(
                     }
             )
 
-            // 4. Current cycle day marker with quiet pulsing ripple (position cached in drawWithCache)
+            // 4. Current cycle day marker with quiet pulsing ripple (position cached in drawWithCache).
+            //    During a midday-to-midday transition, move halfway between the two days and blend colors.
             val currentDay = todayInfo.cycleDay
             if (currentDay != null) {
                 val count = cycleColors.size
                 val clampedIndex = ((currentDay - 1) % count + count) % count
+                val daySlot = when (midStageTransition?.dayDirection) {
+                    -1 -> clampedIndex.toFloat()
+                    +1 -> ((clampedIndex + 1f) % count)
+                    else -> clampedIndex + 0.5f
+                }
+                val partnerIndex = when (midStageTransition?.dayDirection) {
+                    -1 -> (clampedIndex - 1 + count) % count
+                    +1 -> (clampedIndex + 1) % count
+                    else -> null
+                }
                 PulsingDayMarkerOverlay(
-                    dayFraction = (clampedIndex + 0.5f) / count,
+                    dayFraction = daySlot / count,
                     phaseArgb = cycleColors[clampedIndex],
+                    partnerPhaseArgb = partnerIndex?.let { cycleColors[it] },
                     reducedMotion = reducedMotion,
                     modifier = Modifier.matchParentSize()
                 )
@@ -699,10 +706,11 @@ private fun populateWidgetPerimeterPath(
 private fun PulsingDayMarkerOverlay(
     dayFraction: Float,
     phaseArgb: Int,
+    partnerPhaseArgb: Int?,
     reducedMotion: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val packed = CyclePalette.markerColorsArgb(phaseArgb)
+    val packed = CyclePalette.markerColorsArgb(phaseArgb, partnerPhaseArgb)
     val haloColor = Color(CyclePalette.unpackHalo(packed))
     val dotColor = Color(CyclePalette.unpackDot(packed))
 

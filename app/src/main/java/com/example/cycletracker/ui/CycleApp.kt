@@ -60,6 +60,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -84,6 +85,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.cycletracker.domain.CycleCalculator
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
@@ -307,16 +309,23 @@ fun CycleApp(
         }
     }
 
-    // Live midnight rollover refresh whenever the user resumes Maya on a new calendar day
+    // Refresh on resume and at the exact next midnight or midday (transition day) boundary
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, viewModel) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                viewModel.refreshTodayIfNeeded()
+                viewModel.refreshTimeStateIfNeeded()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(state.today, state.needsMiddayRefreshToday, state.isAfterNoon) {
+        val nextBoundaryMs = CyclePalette.computeNextRefreshMillis(state.needsMiddayRefreshToday)
+        val waitMs = (nextBoundaryMs - System.currentTimeMillis()).coerceAtLeast(1_000L)
+        delay(waitMs)
+        viewModel.refreshTimeStateIfNeeded()
     }
 
     if (showHistoryPage) {
@@ -542,6 +551,7 @@ private fun HomeScreen(
 
                     HomeWidgetPreviewCard(
                         todayInfo = state.todayClassification,
+                        midStageTransition = state.midStageTransition,
                         hasData = state.model.hasData,
                         periodStarts = state.periodStarts,
                         model = state.model,
@@ -607,6 +617,7 @@ private fun HomeScreen(
                 ) {
                     HomeWidgetPreviewCard(
                         todayInfo = state.todayClassification,
+                        midStageTransition = state.midStageTransition,
                         hasData = state.model.hasData,
                         periodStarts = state.periodStarts,
                         model = state.model,

@@ -104,10 +104,10 @@ class CycleRepository(private val context: Context) {
         return updated
     }
 
-    fun getLastWidgetRenderEpochDay(): Long = prefs.getLong(KEY_LAST_WIDGET_RENDER_DAY, Long.MIN_VALUE)
+    fun getLastWidgetRenderSlot(): Long = prefs.getLong(KEY_LAST_WIDGET_RENDER_SLOT, Long.MIN_VALUE)
 
-    fun setLastWidgetRenderEpochDay(epochDay: Long) {
-        prefs.edit().putLong(KEY_LAST_WIDGET_RENDER_DAY, epochDay).apply()
+    fun setLastWidgetRenderSlot(slot: Long) {
+        prefs.edit().putLong(KEY_LAST_WIDGET_RENDER_SLOT, slot).apply()
     }
 
     private fun readRawPeriodStarts(): MutableSet<LocalDate> {
@@ -137,6 +137,6 @@ class CycleRepository(private val context: Context) {
         private const val KEY_PERIOD_REMINDER_DAYS_BEFORE = "period_reminder_days_before"
         private const val KEY_FERTILE_REMINDER_ENABLED = "fertile_reminder_enabled"
         private const val KEY_APP_LOCK_ENABLED = "app_lock_enabled"
-        private const val KEY_LAST_WIDGET_RENDER_DAY = "last_widget_render_day"
+        private const val KEY_LAST_WIDGET_RENDER_SLOT = "last_widget_render_slot"
     }
 }

@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.time.LocalDate
+import java.time.LocalTime
 
 data class CycleUiState(
     val today: LocalDate,
@@ -20,7 +21,10 @@ data class CycleUiState(
     val settings: CycleSettings,
     val model: CycleModel,
     val selectedDate: LocalDate,
-    val todayClassification: DayClassification
+    val todayClassification: DayClassification,
+    val midStageTransition: CyclePalette.MidStageTransition?,
+    val needsMiddayRefreshToday: Boolean,
+    val isAfterNoon: Boolean
 )
 
 class CycleViewModel(application: Application) : AndroidViewModel(application) {
@@ -30,45 +34,78 @@ class CycleViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(loadInitialState())
     val uiState: StateFlow<CycleUiState> = _uiState.asStateFlow()
 
-    private fun loadInitialState(): CycleUiState {
-        val starts = repository.getPeriodStarts()
-        val settings = repository.getSettings()
-        val model = CycleCalculator.computeModel(starts)
-        val today = LocalDate.now()
+    private fun buildState(
+        starts: List<LocalDate>,
+        settings: CycleSettings,
+        model: CycleModel,
+        today: LocalDate,
+        selectedDate: LocalDate,
+        nowTime: LocalTime = LocalTime.now()
+    ): CycleUiState {
+        val threeDays = CycleCalculator.classifyRange(
+            startDate = today.minusDays(1),
+            dayCount = 3,
+            periodStarts = starts,
+            model = model,
+            periodLength = settings.periodLength
+        )
+        val yesterdayInfo = threeDays[0]
+        val todayInfo = threeDays[1]
+        val tomorrowInfo = threeDays[2]
+        val transition = CyclePalette.resolveMidStageTransition(
+            yesterdayInfo = yesterdayInfo,
+            todayInfo = todayInfo,
+            tomorrowInfo = tomorrowInfo,
+            hasData = model.hasData,
+            nowTime = nowTime
+        )
+        val needsMidday = CyclePalette.needsMiddayRefresh(
+            yesterdayInfo = yesterdayInfo,
+            todayInfo = todayInfo,
+            tomorrowInfo = tomorrowInfo,
+            hasData = model.hasData
+        )
         return CycleUiState(
             today = today,
             periodStarts = starts,
             settings = settings,
             model = model,
-            selectedDate = today,
-            todayClassification = CycleCalculator.classifyDate(
-                date = today,
-                periodStarts = starts,
-                model = model,
-                periodLength = settings.periodLength
-            )
+            selectedDate = selectedDate,
+            todayClassification = todayInfo,
+            midStageTransition = transition,
+            needsMiddayRefreshToday = needsMidday,
+            isAfterNoon = !nowTime.isBefore(LocalTime.NOON)
         )
     }
 
+    private fun loadInitialState(): CycleUiState {
+        val starts = repository.getPeriodStarts()
+        val settings = repository.getSettings()
+        val model = CycleCalculator.computeModel(starts)
+        val today = LocalDate.now()
+        return buildState(starts, settings, model, today, selectedDate = today)
+    }
+
     /**
-     * Refreshes [CycleUiState.today] and [CycleUiState.todayClassification] when the user
-     * resumes the app on a new calendar day after leaving it in Recents overnight.
+     * Refreshes [CycleUiState.today] and midday-to-midday transition state when the user resumes
+     * the app or crosses midnight / midday (on stage-transition days).
      */
-    fun refreshTodayIfNeeded() {
-        val now = LocalDate.now()
+    fun refreshTimeStateIfNeeded() {
+        val nowDate = LocalDate.now()
+        val nowTime = LocalTime.now()
+        val afterNoon = !nowTime.isBefore(LocalTime.NOON)
         _uiState.update { state ->
-            if (state.today == now) return@update state
-            val nextSelected = if (state.selectedDate == state.today) now else state.selectedDate
-            state.copy(
-                today = now,
-                selectedDate = nextSelected,
-                todayClassification = CycleCalculator.classifyDate(
-                    date = now,
-                    periodStarts = state.periodStarts,
-                    model = state.model,
-                    periodLength = state.settings.periodLength
-                )
-            )
+            val dateChanged = state.today != nowDate
+            val halfDayChanged = state.isAfterNoon != afterNoon
+            if (!dateChanged && (!halfDayChanged || !state.needsMiddayRefreshToday)) {
+                return@update state
+            }
+            val nextSelected = if (dateChanged && state.selectedDate == state.today) {
+                nowDate
+            } else {
+                state.selectedDate
+            }
+            buildState(state.periodStarts, state.settings, state.model, nowDate, nextSelected, nowTime)
         }
     }
 
@@ -84,16 +121,7 @@ class CycleViewModel(application: Application) : AndroidViewModel(application) {
             if (state.today == now) {
                 state.copy(selectedDate = now)
             } else {
-                state.copy(
-                    today = now,
-                    selectedDate = now,
-                    todayClassification = CycleCalculator.classifyDate(
-                        date = now,
-                        periodStarts = state.periodStarts,
-                        model = state.model,
-                        periodLength = state.settings.periodLength
-                    )
-                )
+                buildState(state.periodStarts, state.settings, state.model, now, selectedDate = now)
             }
         }
     }
@@ -165,18 +193,7 @@ class CycleViewModel(application: Application) : AndroidViewModel(application) {
             val model = CycleCalculator.computeModel(starts)
             val today = LocalDate.now()
             _uiState.update { state ->
-                state.copy(
-                    today = today,
-                    periodStarts = starts,
-                    settings = settings,
-                    model = model,
-                    todayClassification = CycleCalculator.classifyDate(
-                        date = today,
-                        periodStarts = starts,
-                        model = model,
-                        periodLength = settings.periodLength
-                    )
-                )
+                buildState(starts, settings, model, today, state.selectedDate)
             }
             starts.size
         }
@@ -186,33 +203,14 @@ class CycleViewModel(application: Application) : AndroidViewModel(application) {
         val model = CycleCalculator.computeModel(starts)
         val today = LocalDate.now()
         _uiState.update { state ->
-            state.copy(
-                today = today,
-                periodStarts = starts,
-                model = model,
-                todayClassification = CycleCalculator.classifyDate(
-                    date = today,
-                    periodStarts = starts,
-                    model = model,
-                    periodLength = state.settings.periodLength
-                )
-            )
+            buildState(starts, state.settings, model, today, state.selectedDate)
         }
     }
 
     private fun refreshWithSettings(settings: CycleSettings) {
         val today = LocalDate.now()
         _uiState.update { state ->
-            state.copy(
-                today = today,
-                settings = settings,
-                todayClassification = CycleCalculator.classifyDate(
-                    date = today,
-                    periodStarts = state.periodStarts,
-                    model = state.model,
-                    periodLength = settings.periodLength
-                )
-            )
+            buildState(state.periodStarts, settings, state.model, today, state.selectedDate)
         }
     }
 }

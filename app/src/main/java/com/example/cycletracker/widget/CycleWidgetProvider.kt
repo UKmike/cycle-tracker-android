@@ -30,7 +30,7 @@ import com.example.cycletracker.domain.FertilityStatus
 import com.example.cycletracker.notifications.CycleReminderScheduler
 import com.example.cycletracker.ui.CyclePalette
 import java.time.LocalDate
-import java.time.ZoneId
+import java.time.LocalTime
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max
@@ -59,8 +59,12 @@ class CycleWidgetProvider : AppWidgetProvider() {
         for (appWidgetId in appWidgetIds) {
             updateWidget(context, appWidgetManager, appWidgetId, batch)
         }
-        batch.repo.setLastWidgetRenderEpochDay(batch.today.toEpochDay())
-        scheduleMidnightUpdate(context, assumeHasWidgets = true)
+        batch.repo.setLastWidgetRenderSlot(batch.renderSlot)
+        scheduleMidnightUpdate(
+            context,
+            assumeHasWidgets = true,
+            needsMiddayRefreshToday = batch.needsMiddayRefreshToday
+        )
     }
 
     override fun onAppWidgetOptionsChanged(
@@ -79,13 +83,13 @@ class CycleWidgetProvider : AppWidgetProvider() {
         when (intent.action) {
             ACTION_MIDNIGHT_UPDATE,
             Intent.ACTION_DATE_CHANGED -> {
-                updateAllWidgets(context, onlyIfDateChanged = true)
+                updateAllWidgets(context, onlyIfSlotChanged = true)
             }
             Intent.ACTION_TIME_CHANGED,
             Intent.ACTION_TIMEZONE_CHANGED,
             Intent.ACTION_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED -> {
-                updateAllWidgets(context, onlyIfDateChanged = false)
+                updateAllWidgets(context, onlyIfSlotChanged = false)
                 CycleReminderScheduler.reschedule(context)
             }
         }
@@ -96,7 +100,7 @@ class CycleWidgetProvider : AppWidgetProvider() {
             "com.example.cycletracker.action.MIDNIGHT_WIDGET_UPDATE"
         private const val MIDNIGHT_REQUEST_CODE = 1001
 
-        fun updateAllWidgets(context: Context, onlyIfDateChanged: Boolean = false) {
+        fun updateAllWidgets(context: Context, onlyIfSlotChanged: Boolean = false) {
             val manager = AppWidgetManager.getInstance(context)
             val componentName = ComponentName(context, CycleWidgetProvider::class.java)
             val ids = manager.getAppWidgetIds(componentName)
@@ -107,18 +111,25 @@ class CycleWidgetProvider : AppWidgetProvider() {
 
             val repo = CycleRepository(context)
             val today = LocalDate.now()
-            val todayEpoch = today.toEpochDay()
-            if (onlyIfDateChanged && repo.getLastWidgetRenderEpochDay() == todayEpoch) {
-                scheduleMidnightUpdate(context, assumeHasWidgets = true)
+            val batch = loadWidgetBatchData(context, repo, today)
+            if (onlyIfSlotChanged && repo.getLastWidgetRenderSlot() == batch.renderSlot) {
+                scheduleMidnightUpdate(
+                    context,
+                    assumeHasWidgets = true,
+                    needsMiddayRefreshToday = batch.needsMiddayRefreshToday
+                )
                 return
             }
 
-            val batch = loadWidgetBatchData(context, repo, today)
             for (id in ids) {
                 updateWidget(context, manager, id, batch)
             }
-            repo.setLastWidgetRenderEpochDay(todayEpoch)
-            scheduleMidnightUpdate(context, assumeHasWidgets = true)
+            repo.setLastWidgetRenderSlot(batch.renderSlot)
+            scheduleMidnightUpdate(
+                context,
+                assumeHasWidgets = true,
+                needsMiddayRefreshToday = batch.needsMiddayRefreshToday
+            )
         }
 
         private fun midnightPendingIntent(context: Context, flags: Int): PendingIntent? {
@@ -133,25 +144,44 @@ class CycleWidgetProvider : AppWidgetProvider() {
             )
         }
 
-        fun scheduleMidnightUpdate(context: Context, assumeHasWidgets: Boolean = false) {
+        fun scheduleMidnightUpdate(
+            context: Context,
+            assumeHasWidgets: Boolean = false,
+            needsMiddayRefreshToday: Boolean? = null
+        ) {
             if (!assumeHasWidgets) {
                 val manager = AppWidgetManager.getInstance(context)
                 val componentName = ComponentName(context, CycleWidgetProvider::class.java)
                 if (manager.getAppWidgetIds(componentName).isEmpty()) return
             }
 
-            val nextMidnightMillis = LocalDate.now()
-                .plusDays(1)
-                .atStartOfDay(ZoneId.systemDefault())
-                .toInstant()
-                .toEpochMilli()
+            val needsMidday = needsMiddayRefreshToday ?: run {
+                val repo = CycleRepository(context)
+                val starts = repo.getPeriodStarts()
+                val settings = repo.getSettings()
+                val model = CycleCalculator.computeModel(starts)
+                if (!model.hasData) {
+                    false
+                } else {
+                    val days = CycleCalculator.classifyRange(
+                        startDate = LocalDate.now().minusDays(1),
+                        dayCount = 3,
+                        periodStarts = starts,
+                        model = model,
+                        periodLength = settings.periodLength
+                    )
+                    CyclePalette.needsMiddayRefresh(days[0], days[1], days[2], hasData = true)
+                }
+            }
+
+            val nextRefreshMillis = CyclePalette.computeNextRefreshMillis(needsMidday)
 
             val pi = midnightPendingIntent(
                 context,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             ) ?: return
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            alarmManager.set(AlarmManager.RTC, nextMidnightMillis, pi)
+            alarmManager.set(AlarmManager.RTC, nextRefreshMillis, pi)
         }
 
         private fun cancelMidnightUpdate(context: Context) {
@@ -164,6 +194,34 @@ class CycleWidgetProvider : AppWidgetProvider() {
             existing.cancel()
         }
 
+        private fun styleForDay(info: DayClassification): WidgetStyle = when {
+            info.isLoggedPeriod -> WidgetStyle(
+                textColor = CyclePalette.ARGB_WIDGET_TEXT_PERIOD,
+                footerColor = CyclePalette.ARGB_WIDGET_FOOTER_PERIOD,
+                statusLabel = "Period"
+            )
+            info.isPredictedPeriod -> WidgetStyle(
+                textColor = CyclePalette.ARGB_WIDGET_TEXT_LIKELY,
+                footerColor = CyclePalette.ARGB_WIDGET_FOOTER_LIKELY,
+                statusLabel = "Likely Period"
+            )
+            info.fertility == FertilityStatus.FERTILE -> WidgetStyle(
+                textColor = CyclePalette.ARGB_GREEN_BRIGHT,
+                footerColor = CyclePalette.ARGB_WIDGET_FOOTER_FERTILE,
+                statusLabel = "Fertile"
+            )
+            info.fertility == FertilityStatus.COULD_BE_FERTILE -> WidgetStyle(
+                textColor = CyclePalette.ARGB_YELLOW_COULD_BE,
+                footerColor = CyclePalette.ARGB_WIDGET_FOOTER_COULD_BE,
+                statusLabel = "Could Be Fertile"
+            )
+            else -> WidgetStyle(
+                textColor = CyclePalette.ARGB_BLUE_NOT_FERTILE,
+                footerColor = CyclePalette.ARGB_WIDGET_FOOTER_NOT_FERTILE,
+                statusLabel = "Not Fertile"
+            )
+        }
+
         private fun loadWidgetBatchData(
             context: Context,
             repo: CycleRepository = CycleRepository(context),
@@ -172,12 +230,34 @@ class CycleWidgetProvider : AppWidgetProvider() {
             val starts = repo.getPeriodStarts()
             val settings = repo.getSettings()
             val model = CycleCalculator.computeModel(starts)
-            val info = CycleCalculator.classifyDate(
-                date = today,
+            val threeDays = CycleCalculator.classifyRange(
+                startDate = today.minusDays(1),
+                dayCount = 3,
                 periodStarts = starts,
                 model = model,
                 periodLength = settings.periodLength
             )
+            val yesterdayInfo = threeDays[0]
+            val info = threeDays[1]
+            val tomorrowInfo = threeDays[2]
+            val nowTime = LocalTime.now()
+            val afterNoon = !nowTime.isBefore(LocalTime.NOON)
+            val transition = CyclePalette.resolveMidStageTransition(
+                yesterdayInfo = yesterdayInfo,
+                todayInfo = info,
+                tomorrowInfo = tomorrowInfo,
+                hasData = model.hasData,
+                nowTime = nowTime
+            )
+            val needsMiddayRefresh = CyclePalette.needsMiddayRefresh(
+                yesterdayInfo = yesterdayInfo,
+                todayInfo = info,
+                tomorrowInfo = tomorrowInfo,
+                hasData = model.hasData
+            )
+            val renderSlot = today.toEpochDay() * 4L +
+                (if (afterNoon) 2L else 0L) +
+                (if (transition != null) 1L else 0L)
             val cycleColors = CyclePalette.computeCycleDayArgbColors(starts, model, settings.periodLength)
 
             val launchIntent = Intent(context, MainActivity::class.java).apply {
@@ -192,37 +272,23 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
 
-            val style = when {
-                info.isLoggedPeriod -> WidgetStyle(
-                    textColor = CyclePalette.ARGB_WIDGET_TEXT_PERIOD,
-                    footerColor = CyclePalette.ARGB_WIDGET_FOOTER_PERIOD,
-                    statusLabel = "Period"
+            val todayStyle = styleForDay(info)
+            val style = if (transition != null) {
+                val partnerStyle = styleForDay(transition.partnerInfo)
+                todayStyle.copy(
+                    textColor = CyclePalette.blendArgb(todayStyle.textColor, partnerStyle.textColor, 0.5f),
+                    footerColor = CyclePalette.blendArgb(todayStyle.footerColor, partnerStyle.footerColor, 0.5f)
                 )
-                info.isPredictedPeriod -> WidgetStyle(
-                    textColor = CyclePalette.ARGB_WIDGET_TEXT_LIKELY,
-                    footerColor = CyclePalette.ARGB_WIDGET_FOOTER_LIKELY,
-                    statusLabel = "Likely Period"
-                )
-                info.fertility == FertilityStatus.FERTILE -> WidgetStyle(
-                    textColor = CyclePalette.ARGB_GREEN_BRIGHT,
-                    footerColor = CyclePalette.ARGB_WIDGET_FOOTER_FERTILE,
-                    statusLabel = "Fertile"
-                )
-                info.fertility == FertilityStatus.COULD_BE_FERTILE -> WidgetStyle(
-                    textColor = CyclePalette.ARGB_YELLOW_COULD_BE,
-                    footerColor = CyclePalette.ARGB_WIDGET_FOOTER_COULD_BE,
-                    statusLabel = "Could Be Fertile"
-                )
-                else -> WidgetStyle(
-                    textColor = CyclePalette.ARGB_BLUE_NOT_FERTILE,
-                    footerColor = CyclePalette.ARGB_WIDGET_FOOTER_NOT_FERTILE,
-                    statusLabel = "Not Fertile"
-                )
+            } else {
+                todayStyle
             }
 
             return WidgetBatchData(
                 repo = repo,
                 today = today,
+                renderSlot = renderSlot,
+                needsMiddayRefreshToday = needsMiddayRefresh,
+                midStageTransition = transition,
                 model = model,
                 info = info,
                 cycleColors = cycleColors,
@@ -263,7 +329,8 @@ class CycleWidgetProvider : AppWidgetProvider() {
                 isCompact = isCompact1x1,
                 accentColor = style.textColor,
                 cycleColors = batch.cycleColors,
-                todayInfo = info
+                todayInfo = info,
+                midStageTransition = batch.midStageTransition
             )
             views.setImageViewBitmap(R.id.widget_bg_image, bgBitmap)
 
@@ -360,7 +427,8 @@ class CycleWidgetProvider : AppWidgetProvider() {
             isCompact: Boolean,
             accentColor: Int,
             cycleColors: IntArray,
-            todayInfo: DayClassification
+            todayInfo: DayClassification,
+            midStageTransition: CyclePalette.MidStageTransition?
         ): Bitmap {
             val density = context.resources.displayMetrics.density
             // Cap bitmap dimensions to keep RemoteViews memory low while staying crisp
@@ -515,15 +583,30 @@ class CycleWidgetProvider : AppWidgetProvider() {
                     tickPaint
                 )
 
-                // Highlight current cycle day on the outline (opaque halo + deep solid dot)
+                // Highlight current cycle day on the outline (opaque halo + deep solid dot).
+                // During a midday-to-midday transition, place the dot halfway between the two days
+                // and blend the halo/dot colors 50/50.
                 val currentDay = todayInfo.cycleDay
                 if (currentDay != null) {
                     val clampedIndex = ((currentDay - 1) % count + count) % count
-                    val midDist = totalLength * (clampedIndex + 0.5f) / count
+                    val daySlot = when (midStageTransition?.dayDirection) {
+                        -1 -> clampedIndex.toFloat()
+                        +1 -> ((clampedIndex + 1f) % count)
+                        else -> clampedIndex + 0.5f
+                    }
+                    val partnerIndex = when (midStageTransition?.dayDirection) {
+                        -1 -> (clampedIndex - 1 + count) % count
+                        +1 -> (clampedIndex + 1) % count
+                        else -> null
+                    }
+                    val midDist = totalLength * daySlot / count
                     val pos = FloatArray(2)
                     pm.getPosTan(midDist, pos, null)
 
-                    val packed = CyclePalette.markerColorsArgb(cycleColors[clampedIndex])
+                    val packed = CyclePalette.markerColorsArgb(
+                        phaseArgb = cycleColors[clampedIndex],
+                        nextPhaseArgb = partnerIndex?.let { cycleColors[it] }
+                    )
                     val markerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                         style = Paint.Style.FILL
                     }
@@ -593,6 +676,9 @@ class CycleWidgetProvider : AppWidgetProvider() {
         private class WidgetBatchData(
             val repo: CycleRepository,
             val today: LocalDate,
+            val renderSlot: Long,
+            val needsMiddayRefreshToday: Boolean,
+            val midStageTransition: CyclePalette.MidStageTransition?,
             val model: CycleModel,
             val info: DayClassification,
             val cycleColors: IntArray,
